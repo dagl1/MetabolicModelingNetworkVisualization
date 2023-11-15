@@ -63,6 +63,16 @@ class ReactionEdges:
         self.flux = 0
         self.expression = 0
 
+class NetworkNodesForPhysicsSimulation:
+    def __init__(self, x, y ,metabolite_node ):
+        self.x, self.y = x,y
+        self.metabolite = metabolite_node
+        self.connected_nodes = []
+        self.connected_edge_reactions = []
+        if self.metabolite.fixed_node_input or self.metabolite.fixed_node_output:
+            self.fixed = True
+        self.x_vector, self.y_vector = 0, 0
+
 
 class MetabolicNetwork:
     def __init__(self, nodes, edges):
@@ -144,7 +154,7 @@ class MetabolicNetwork:
                 self.not_included_metabolites.append(metabolite)
         self.included_metabolites = [item for item in self.metabolites_nodes if item not in self.not_included_metabolites]
         for metabolite in self.metabolites_nodes:
-            if metabolite.fixed_node_input or metabolite.fixed_node_output:
+            if (metabolite.fixed_node_input or metabolite.fixed_node_output) and metabolite not in self.included_metabolites:
                 self.included_metabolites.append(metabolite)
         self.not_included_metabolites = [item for item in self.metabolites_nodes if item not in self.included_metabolites]
     def set_reactions_for_nodes(self):
@@ -193,7 +203,7 @@ class MetabolicNetwork:
             for reaction in metabolite.reactions:
                 reaction_ = self.find_reaction(reaction)
                 for met, stoichiometry in reaction_.metabolites.items():
-                    if metabolite.id == met and stoichiometry > 0:
+                    if metabolite.id == met and stoichiometry < 0:
                         for met, stoichiometry in reaction_.metabolites.items():
                             if stoichiometry > 0 and met != metabolite.id and met in [metabolit.id for metabolit in self.included_metabolites]:
                                 met_ = self.find_metabolite(met)
@@ -208,28 +218,155 @@ class MetabolicNetwork:
         for compartment in compartments:
             for metabolite in self.included_metabolites:
                 if metabolite.compartment == compartment:
-                    self.network_edges.append((compartment,metabolite.id, None))
+                    self.network_edges.append((compartment,metabolite.id, "Compartment_reaction"))
         self.compartments = compartments
 
 
     def run_network_simulation(self):
         self.network_node_positions = {}
 
-        self.set_fixded_and_non_fixed_nodes()
-        self.provide_random_positions_for_non_fixed_nodes()
+        self.set_fixed_and_non_fixed_nodes()
+        self.translate_node_positions_to_separate_classes_for_physics_simulation()
 
+        self.network_physics_simulation_loop()
         # translate problem to instances of classes of nodes+connected edges to other nodes
         # way to calculate distance between all nodes
         # calculate forces per node
         ## repulsion 1/(distance cubed + 0.0001)
+        ## special repulsion for compartments and cyclic sets of reactions
         ## attraction per edge towards edge partner, attraction, distance squared
         # move based on force
-
         # add in cyclic repulsion for creation of circles
 
+    def network_physics_simulation_loop(self):
+        # loop
+        iterations = 10000
+        counter = 0
+        std_attraction_force_multiplier = 0.00110
+        std_repulsion_force_multiplier = 5000
+        compartment_attraction_force_multiplier = 100
+        compartment_repulsion_force_multiplier = 50
+        self.calculate_edge_logic()
+        while counter <= iterations:
+            self.calculate_forces_through_network(std_attraction_force_multiplier, std_repulsion_force_multiplier, compartment_attraction_force_multiplier,compartment_repulsion_force_multiplier)
+            self.move_nodes_based_on_forces()
+            counter += 1
+
+    def calculate_edge_logic(self):
+        self.edge_logic_dict = {} #  contains arrays for the different types of edges (for now, std edges, compartment edges, cyclic edges)
+        counter = 0
+        for physics_simulation_node in self.physics_simulation_nodes:
+            physics_simulation_node.id = counter
+            counter +=1
+        temp_std_array = []
+        temp_compartment_array = []
+        for physics_simulation_node in self.physics_simulation_nodes:
+            temp_temp_std_array = [physics_simulation_node.id]
+            temp_temp_compartment_array = [physics_simulation_node.id]
+            for idx, connected_node in enumerate(physics_simulation_node.connected_nodes):
+                if physics_simulation_node.connected_edge_reactions[idx] !=  "Compartment_reaction":
+                    temp_temp_std_array.append(connected_node.id)
+                elif physics_simulation_node.connected_edge_reactions[idx] == "Compartment_reaction":
+                    temp_temp_compartment_array.append(connected_node.id)
+            unique_temp_temp_std_array = []
+            unique_temp_temp_compartment_array = []
+            [unique_temp_temp_std_array.append(i) for i in temp_temp_std_array if i not in unique_temp_temp_std_array]
+            [unique_temp_temp_compartment_array.append(i) for i in temp_temp_compartment_array if i not in unique_temp_temp_compartment_array]
+
+            temp_std_array.append(unique_temp_temp_std_array)
+            temp_compartment_array.append(unique_temp_temp_compartment_array)
+
+        connection_matrix_std_edges = np.zeros((len(temp_std_array),len(temp_std_array)))
+        for edge in temp_std_array:
+            node_id = edge[0]
+            connected_nodes = edge[1:]
+            connection_matrix_std_edges[node_id, connected_nodes] = 1
+
+        connection_matrix_compartment_edges = np.zeros((len(temp_std_array),len(temp_std_array)))
+        for edge in temp_compartment_array:
+            node_id = edge[0]
+            connected_nodes = edge[1:]
+            connection_matrix_compartment_edges[node_id, connected_nodes] = 1
+        self.edge_logic_dict["std_edges"] = connection_matrix_std_edges
+        self.edge_logic_dict["compartment_edges"] = connection_matrix_compartment_edges
+
+    def move_nodes_based_on_forces(self):
+        SMALL_CONSTANT = 0.00001
+        for node in self.physics_simulation_nodes:
+            node.x += node.x_vector * SMALL_CONSTANT
+            node.y += node.y_vector * SMALL_CONSTANT
 
 
-    def set_fixded_and_non_fixed_nodes(self):
+    def calculate_forces_through_network(self, std_attraction_force_multiplier_, std_repulsion_force_multiplier_, compartment_attraction_force_multiplier_, compartment_repulsion_force_multiplier_):
+        distance_matrix, angle_matrix = self.calculate_distance_matrix()
+        np.fill_diagonal(distance_matrix, 1000000)
+        print(distance_matrix[0])
+        force_magnitudes = -1 / np.power(distance_matrix, 3)
+        cos_angles = np.cos(angle_matrix)
+        sin_angles = np.sin(angle_matrix)
+        x_forces = np.sum(force_magnitudes * cos_angles * std_repulsion_force_multiplier_, axis=1)
+        y_forces = np.sum(force_magnitudes * sin_angles * std_repulsion_force_multiplier_, axis=1)
+
+        np.fill_diagonal(distance_matrix,0)
+        force_magnitudes = np.power(distance_matrix,2)
+        # Compute attraction forces using edge connections
+        x_forces_from_edges = np.sum(force_magnitudes * np.cos(angle_matrix)* std_attraction_force_multiplier_, axis=1)
+        y_forces_from_edges = np.sum(force_magnitudes * np.sin(angle_matrix)* std_attraction_force_multiplier_, axis=1)
+
+        combined_x_forces = x_forces + x_forces_from_edges
+        combined_y_forces = y_forces + y_forces_from_edges
+
+        # for idx, physics_simulation_node in enumerate(self.physics_simulation_nodes):
+        #     physics_simulation_node.x_vector = combined_x_forces[idx]
+        #     physics_simulation_node.y_vector = combined_y_forces[idx]
+        for node, x_force, y_force in zip(self.physics_simulation_nodes, combined_x_forces, combined_y_forces):
+            node.x_vector = x_force
+            node.y_vector = y_force
+
+
+
+    def calculate_distance_matrix(self):
+        coordinates = np.array([(obj.x, obj.y) for obj in self.physics_simulation_nodes])
+
+        diff = coordinates[:, np.newaxis, :] - coordinates[np.newaxis, :, :]
+        distance_matrix = np.linalg.norm(diff, axis=2)
+        angle_matrix = np.arctan2(diff[:, :, 1], diff[:, :, 0])
+       # print(distance_matrix)
+        return distance_matrix, angle_matrix
+    def translate_node_positions_to_separate_classes_for_physics_simulation(self):
+        self.physics_simulation_nodes = []
+        for metabolite in self.included_metabolites:
+            x = self.network_node_positions[metabolite.id][0]
+            y = self.network_node_positions[metabolite.id][1]
+            self.physics_simulation_nodes.append(NetworkNodesForPhysicsSimulation(x,y, metabolite))
+        self.find_connected_nodes()
+
+    def find_connected_nodes(self):
+        for physics_simulation_node in self.physics_simulation_nodes:
+            physics_simulation_node.connected_nodes = []
+            physics_simulation_node.connected_edge_reactions = []
+            for edge in self.network_edges:
+                if edge[0] == physics_simulation_node.metabolite.id:
+                    for metab in self.physics_simulation_nodes:
+                        if edge[1] == metab.metabolite.id:
+                            physics_simulation_node.connected_nodes.append(metab)
+                            physics_simulation_node.connected_edge_reactions.append(edge[2])
+                            break
+
+        for physics_simulation_node in self.physics_simulation_nodes:
+            for idx, connected_node in enumerate(physics_simulation_node.connected_nodes):
+                connected_node.connected_nodes.append(physics_simulation_node)
+                connected_node.connected_edge_reactions.append(physics_simulation_node.connected_edge_reactions[idx])
+
+        #this might not be necessary, original usage was to sort double metabolites but maybe unnecessary
+        for physics_simulation_node in self.physics_simulation_nodes:
+            # physics_simulation_node.connected_nodes = list(set(physics_simulation_node.connected_nodes))
+            # physics_simulation_node.connected_edge_reactions = list(set(physics_simulation_node.connected_edge_reactions))
+            # print(len(physics_simulation_node.connected_edge_reactions), len(physics_simulation_node.connected_nodes))
+            # print(physics_simulation_node.connected_edge_reactions)
+            pass
+
+    def set_fixed_and_non_fixed_nodes(self):
         # add code for setting height and width depending on amount of fixed reactions
         # and on max path lenght between metabolites
         output_counter = 1
@@ -246,8 +383,6 @@ class MetabolicNetwork:
             else:
                 self.network_node_positions[metabolite_id] = (random.randint(200, 700 ), random.randint(200, 700))
 
-    def provide_random_positions_for_non_fixed_nodes(self):
-        pass
 
     def extract_non_pseudo_nodes_and_edges(self):
         #remove
@@ -388,6 +523,8 @@ class Application:
 
     def on_double_click(self,event, from_list, to_list):
         self.move_item(event, from_list, to_list)
+        self.met_network.included_metabolites = [self.met_network.find_metabolite(met) for met in self.left_list.get("0", tk.END)]
+        self.met_network.not_included_metabolites = [self.met_network.find_metabolite(met) for met in self.right_list.get("0", tk.END)]
 
     def update_slider(self, value):
         value = int(value)
@@ -403,7 +540,6 @@ class Application:
         scale.set(self.met_network.slider_value)
 
     def draw_network(self,canvas):
-        print(len(self.met_network.network_node_positions))
         # Draw nodes
         node_radius = 5
         for node, (x, y) in self.met_network.network_node_positions.items():
@@ -427,4 +563,5 @@ root.mainloop()
 
 
 ### CURRENT ISSUE:
-# THE code does not correctly keep the position of the different fixed nodes, even when nothing changes, potentially the order in which they are read is different?
+# Right now we get to Nan values in the force calculation, which probably means the repulsion/attraction isn't working correctly
+# also did not add in a thing for not moving fixed notes
