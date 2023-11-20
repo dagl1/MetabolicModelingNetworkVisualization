@@ -8,7 +8,10 @@ import pandas as pd
 import tkinter as tk
 from tkinter import filedialog
 import threading
+import queue
+import copy
 import openpyxl
+
 
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
@@ -21,30 +24,29 @@ if __name__ == '__main__':
 
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
+#
+#
+# class MainLoop:
+#
+#     def __init__(self):
+#         self.WIDTH, self.HEIGHT = 1200, 800
+#         self.FINAL_WIDTH, self.FINAL_HEIGHT = 2400, 1600
+#         pygame.init()
+#         self.canvas = pygame.Surface((self.WIDTH, self.HEIGHT))
+#         self.screen = pygame.display.set_mode((self.FINAL_WIDTH, self.FINAL_HEIGHT))
+#
+#
+# class TkinterSetup:
+#     pass
+#
+#
+# filepath = "E:\Git\MaCSBio-GEM\General\Functions\Metabolic_tasks\Task322Sample1Alpha0.50Beta0.00_Date2023-10-25_21-51-37\ModelsJSON/newModelMILP_OR_AdjustTask322Sample1Scored2.152average4.105alpha0.500beta0.000.json"
+#
+# with open(filepath, 'r') as file:
+#     # Read JSON data
+#     json_data = json.load(file)
+#
 
-
-class MainLoop:
-
-    def __init__(self):
-        self.WIDTH, self.HEIGHT = 1200, 800
-        self.FINAL_WIDTH, self.FINAL_HEIGHT = 2400, 1600
-        pygame.init()
-        self.canvas = pygame.Surface((self.WIDTH, self.HEIGHT))
-        self.screen = pygame.display.set_mode((self.FINAL_WIDTH, self.FINAL_HEIGHT))
-
-
-class TkinterSetup:
-    pass
-
-
-filepath = "E:\Git\MaCSBio-GEM\General\Functions\Metabolic_tasks\Task322Sample1Alpha0.50Beta0.00_Date2023-10-25_21-51-37\ModelsJSON/newModelMILP_OR_AdjustTask322Sample1Scored2.152average4.105alpha0.500beta0.000.json"
-
-with open(filepath, 'r') as file:
-    # Read JSON data
-    json_data = json.load(file)
-
-
-# print(json_data)
 class MetaboliteNodes:
     def __init__(self, id, name, compartment):
         self.id = id
@@ -69,6 +71,7 @@ class ReactionEdges:
         self.flux = 0
         self.expression = 0
 
+
 class CompartmentNode:
     def __init__(self, id, name):
         self.id = id
@@ -78,9 +81,11 @@ class CompartmentNode:
         self.flux = 0
         self.expression = 0
 
+
 class BoundaryNode:
     def __init__(self):
         pass
+
 
 class NetworkNodesForPhysicsSimulation:
     def __init__(self, x, y, instance, id_number, met_network):
@@ -112,13 +117,14 @@ class NetworkNodesForPhysicsSimulation:
 
         self.rect = pygame.Rect(self.x, self.y, 15, 15)
         self.fixed_by_mouse = False
+        self.visible_by_mouse = True
 
     def find_input_and_output_instances(self):
         if isinstance(self.instance, ReactionEdges):
             for metabolite, stoichiometry in self.instance.metabolites.items():
-                if metabolite in [metabolit.id for metabolit in self.met_network.included_metabolites] and stoichiometry <0:
+                if metabolite in [metabolit.id for metabolit in self.met_network.included_metabolites] and stoichiometry < 0:
                     self.input_instances.append(self.met_network.find_metabolite(metabolite))
-                elif metabolite in [metabolit.id for metabolit in self.met_network.included_metabolites] and stoichiometry >0:
+                elif metabolite in [metabolit.id for metabolit in self.met_network.included_metabolites] and stoichiometry > 0:
                     self.output_instances.append(self.met_network.find_metabolite(metabolite))
 
         elif isinstance(self.instance, MetaboliteNodes):
@@ -134,17 +140,21 @@ class NetworkNodesForPhysicsSimulation:
                 if metabolite.id in [metabolit.id for metabolit in self.met_network.included_metabolites]:
                     self.input_instances.append(metabolite)
 
+
 class MetabolicNetwork:
-    def __init__(self, nodes, edges):
+    def __init__(self, nodes, edges, tkinter_app):
         self.metabolites_nodes = nodes
         self.reaction_edges = edges
+        self.tk_application = tkinter_app
         self.set_amount_of_reactions_per_node()
         self.set_slider()
         self.filter_input_output_reactions()
         self.set_reactions_for_nodes()
-        self.commonly_excluded_names = []#["H+", "H2O", "NADH", "NAD+", "NADP+", "NADPH", "FAD", "FADH", "CO2"]
+        self.commonly_excluded_names = []  # ["H+", "H2O", "NADH", "NAD+", "NADP+", "NADPH", "FAD", "FADH", "CO2"]
         self.included_metabolites = []
         self.not_included_metabolites = []
+        self.part_of_physics_metabolites=[]
+        self.not_part_of_physics_metabolites = []
         self.create_lookup_dicts()
         self.update_included_not_included_based_on_slider()
         self.edge_logic_dict = {}
@@ -162,7 +172,13 @@ class MetabolicNetwork:
         self.show_metabolite_names = "No Names"
         self.show_reaction_names = "Reaction Names"
         self.show_compartments = False
-
+        self.show_flux_expression = "None"
+        self.visible_nodes =[]
+        self.not_visible_nodes = []
+        self.queue = queue.Queue()
+        self.df_fluxes_reactions = pd.DataFrame()
+        self.fluxes_dict = {}
+        self.expression_dict = {}
 
     def filter_input_output_reactions(self):
         reaction_edges_copy = []
@@ -223,20 +239,25 @@ class MetabolicNetwork:
     def update_included_not_included_based_on_slider(self):
         self.not_included_metabolites = []
         self.included_metabolites = []
+        self.part_of_physics_metabolites=[]
+        self.not_part_of_physics_metabolites = []
         self.find_reactions_that_should_generally_be_excluded()
         for metabolite in self.metabolites_nodes:
-            if metabolite.amount_of_reactions > self.slider_value and metabolite not in self.not_included_metabolites:
-                self.not_included_metabolites.append(metabolite)
-
+            if metabolite.amount_of_reactions > self.slider_value and metabolite not in self.not_part_of_physics_metabolites:
+                self.not_part_of_physics_metabolites.append(metabolite)
         for metabolite in self.metabolites_nodes:
-            if (metabolite.fixed_node_input or metabolite.fixed_node_output) and metabolite not in self.included_metabolites:
+            if metabolite not in self.included_metabolites:
                 self.included_metabolites.append(metabolite)
+        for metabolite in self.metabolites_nodes:
+             if (metabolite.fixed_node_input or metabolite.fixed_node_output) and metabolite not in self.part_of_physics_metabolites:
+                self.part_of_physics_metabolites.append(metabolite)
                 try:
-                    self.not_included_metabolites.remove(metabolite)
+                    self.not_part_of_physics_metabolites.remove(metabolite)
                 except:
                     pass
-        self.included_metabolites = [item for item in self.metabolites_nodes if item not in self.not_included_metabolites]
-        #self.not_included_metabolites = [item for item in self.metabolites_nodes if item not in self.included_metabolites]
+        self.part_of_physics_metabolites = [item for item in self.metabolites_nodes if item not in self.not_part_of_physics_metabolites]
+        self.not_part_of_physics_metabolites= [item for item in self.metabolites_nodes if item not in self.part_of_physics_metabolites]
+
 
     def set_reactions_for_nodes(self):
         for reaction in self.reaction_edges:
@@ -250,7 +271,7 @@ class MetabolicNetwork:
     def set_amount_of_reactions_per_node(self):
         # dont count temporary reactions
         for reaction in self.reaction_edges:
-            #if not (reaction.lb > 0 and reaction.ub < 1000) or not reaction.name.startswith('temporary_exchange_'):
+            # if not (reaction.lb > 0 and reaction.ub < 1000) or not reaction.name.startswith('temporary_exchange_'):
             for key, value in reaction.metabolites.items():
                 for metabolite in self.metabolites_nodes:
                     if key == metabolite.id:
@@ -275,14 +296,14 @@ class MetabolicNetwork:
 
         # create edge matrices
         self.create_edges_matrices_dicts()
+        self.update_edge_network()
 
         # set initial x, y positions for non-boundary nodes
         self.set_x_y_positions_non_boundary_nodes()
 
         # run network
-        simulation_thread = threading.Thread(target = self.run_network_simulation)
+        simulation_thread = threading.Thread(target=self.run_network_simulation)
         simulation_thread.start()
-        #self.run_network_simulation()
 
         nodes, edges = self.extract_non_pseudo_nodes_and_edges()
         return nodes, edges
@@ -305,6 +326,8 @@ class MetabolicNetwork:
         id_number = 0
         for metabolite in self.included_metabolites:
             self.all_network_nodes.append(NetworkNodesForPhysicsSimulation(0, 0, metabolite, id_number, self))
+            if metabolite in [met for met in self.not_part_of_physics_metabolites]:
+                self.all_network_nodes[-1].visible_by_mouse = False
             id_number += 1
 
         for reaction in self.reaction_edges:
@@ -336,7 +359,7 @@ class MetabolicNetwork:
     def create_edges_matrices_dicts(self):
         node_length = len(self.all_network_nodes)
 
-        temp_connection_matrix = np.zeros((node_length,node_length))
+        temp_connection_matrix = np.zeros((node_length, node_length))
         edges = []
         for node in self.all_network_nodes:
             edge = [node.id_number]
@@ -360,7 +383,6 @@ class MetabolicNetwork:
             temp_connection_matrix[node_id, connected_nodes] = 1
         self.edge_logic_dict["reaction_metabolite_attraction"] = temp_connection_matrix
 
-
         temp_connection_matrix = np.zeros((node_length, node_length))
         edges = []
         for node in self.all_network_nodes:
@@ -374,7 +396,7 @@ class MetabolicNetwork:
             node_id = edge[0]
             connected_nodes = edge[1:]
             temp_connection_matrix[node_id, connected_nodes] = 1
-        self.edge_logic_dict["compartment_compartment_repulsion"]= temp_connection_matrix
+        self.edge_logic_dict["compartment_compartment_repulsion"] = temp_connection_matrix
 
         temp_connection_matrix = np.zeros((node_length, node_length))
         edges = []
@@ -397,7 +419,6 @@ class MetabolicNetwork:
             temp_connection_matrix[node_id, connected_nodes] = 1
         self.edge_logic_dict["fixed_metabolite_repulsion"] = temp_connection_matrix
 
-
         temp_connection_matrix = np.zeros((node_length, node_length))
         edges = []
         for node in self.all_network_nodes:
@@ -411,7 +432,6 @@ class MetabolicNetwork:
             connected_nodes = edge[1:]
             temp_connection_matrix[node_id, connected_nodes] = 1
         self.edge_logic_dict["boundary_repulsion"] = temp_connection_matrix
-
 
         temp_connection_matrix = np.zeros((node_length, node_length))
         edges = []
@@ -428,7 +448,6 @@ class MetabolicNetwork:
 
             temp_connection_matrix[node_id, connected_nodes] = 1
         self.edge_logic_dict["normal_repulsion"] = temp_connection_matrix
-
 
         temp_connection_matrix = np.zeros((node_length, node_length))
         edges = []
@@ -448,7 +467,45 @@ class MetabolicNetwork:
                 temp_connection_matrix[extra_edge, node_id] = 1
         self.edge_logic_dict["metabolite_compartment_attraction"] = temp_connection_matrix
 
+    def update_edge_network(self):
+        self.create_edges_matrices_dicts()
+        idx_list = []
+        for node in self.all_network_nodes:
+            if node.node_type == "metabolite" and node.instance in [met for met in self.not_part_of_physics_metabolites]:
+                idx_list.append(node.id_number)
+        for key,matrix in self.edge_logic_dict.items():
+            if key != "draw_lines_connections":
+                for i in idx_list:
+                    matrix[i, :] = 0  # Zero out rows
+                    matrix[:, i] = 0  # Zero out columns
+                self.edge_logic_dict[key] = matrix
+        self.queue.put(self.tk_application.create_listboxes)
+        self.queue.put(self.tk_application.create_listboxes_visibility)
+        node_length = len(self.all_network_nodes)
 
+        temp_connection_matrix = np.zeros((node_length, node_length))
+        edges = []
+        for node in self.all_network_nodes:
+            edge = [node.id_number]
+            if node.node_type == "reaction" or node.node_type == "metabolite":
+                for input_node in node.input_instances:
+                    for temp_node in self.all_network_nodes:
+                        if input_node == temp_node.instance:
+                            connected_node_id_number = temp_node.id_number
+                            edge.append(connected_node_id_number)
+                            break
+                for output_node in node.output_instances:
+                    for temp_node in self.all_network_nodes:
+                        if output_node == temp_node.instance:
+                            connected_node_id_number = temp_node.id_number
+                            edge.append(connected_node_id_number)
+                            break
+            edges.append(edge)
+        for edge in edges:
+            node_id = edge[0]
+            connected_nodes = edge[1:]
+            temp_connection_matrix[node_id, connected_nodes] = 1
+        self.edge_logic_dict["draw_lines_connections"] = temp_connection_matrix
 
     def set_x_y_positions_non_boundary_nodes(self):
         fixed_input_counter = 0
@@ -460,35 +517,22 @@ class MetabolicNetwork:
             if node.node_type == "boundary":
                 pass
             elif node.node_type == "metabolite" and node.instance.fixed_node_output:
-                node.x =  200 + (fixed_output_counter * 25)
+                node.x = 200 + (fixed_output_counter * 25)
                 fixed_output_counter += 1
                 node.y = height - 50
             elif node.node_type == "metabolite" and node.instance.fixed_node_input:
-                node.x = 200+ (fixed_input_counter *25)
+                node.x = 200 + (fixed_input_counter * 25)
                 fixed_input_counter += 1
                 node.y = 0 + 50
             else:
-                node.x = random.randint(200, width-200)
-                node.y = random.randint(200, height-200)
-
+                node.x = random.randint(200, width - 200)
+                node.y = random.randint(200, height - 200)
 
     def run_network_simulation(self):
         self.network_physics_simulation_loop()
-        # translate problem to instances of classes of nodes+connected edges to other nodes
-        # way to calculate distance between all nodes
-        # calculate forces per node
-        ## repulsion 1/(distance cubed + 0.0001)
-        ## special repulsion for compartments and cyclic sets of reactions
-        ## attraction per edge towards edge partner, attraction, distance squared
-        # move based on force
-        # add in cyclic repulsion for creation of circles
-
-
 
     def network_physics_simulation_loop(self):
         # loop
-        iterations = 100000
-        counter = 0
         try:
             pygame.quit()
         except:
@@ -497,13 +541,13 @@ class MetabolicNetwork:
         running = True
         pygame_on = True
         if pygame_on:
-            os.environ['SDL_VIDEO_WINDOW_POS'] = '700,50'
+            os.environ['SDL_VIDEO_WINDOW_POS'] = '1020,30'
             pygame.init()
-            display = pygame.display.set_mode([1800, 1200])
+            display = pygame.display.set_mode([1500, 1200])
 
             self.font = pygame.font.SysFont(None, self.font_size)
             self.font2 = pygame.font.SysFont(None, 28)
-            key_actions = {"left_mouse_clicked": False, "right_mouse_clicked": False}
+            key_actions = {"left_mouse_clicked": False, "right_mouse_clicked": False, "middle_mouse_clicked": False}
         while running:
             if pygame_on:
                 display.fill((0, 0, 0))
@@ -521,6 +565,16 @@ class MetabolicNetwork:
                                 if node.rect.collidepoint(mouse_pos):
                                     node.fixed_by_mouse = True
                                     selected_node = node
+                                    break
+                        elif event.button == 2:
+                            key_actions["middle_mouse_clicked"] = True
+                            mouse_pos = pygame.mouse.get_pos()
+                            for node in self.all_network_nodes:
+                                if node.rect.collidepoint(mouse_pos):
+                                    node.visible_by_mouse = not node.visible_by_mouse
+                                    self.queue.put(self.tk_application.create_listboxes)
+                                    self.queue.put(self.tk_application.create_listboxes_visibility)
+
                                     break
                         elif event.button == 3:
                             key_actions["right_mouse_clicked"] = True
@@ -544,71 +598,114 @@ class MetabolicNetwork:
                     except:
                         pass
                 for idx, node in enumerate(self.all_network_nodes):
-                    if node.node_type == "reaction":
-                        pygame.draw.rect(display, (0, 200, 200), node.rect)
-                        if self.show_reaction_names == "Reaction Names":
-                            text_surface = self.font.render(node.instance.name, True, (255,255,255))
-                            text_rect = text_surface.get_rect(center =node.rect.center )
-                            display.blit(text_surface, text_rect)
-                        elif self.show_reaction_names == "Reaction IDs":
-                            text_surface = self.font.render(node.instance.id, True, (255,255,255))
-                            text_rect = text_surface.get_rect(center =node.rect.center )
-                            display.blit(text_surface, text_rect)
-                        elif self.show_reaction_names == "No names":
-                            pass
-                    elif node.node_type == "metabolite" :
-                        for idx, compartment in enumerate(self.compartments):
-                            if node.instance.compartment == compartment.id:
-                                pygame.draw.rect(display, (50+ (idx*50) % 255, 50, 50), node.rect)
-                        if node.instance.fixed_node_input or node.instance.fixed_node_output:
-                            if self.show_fixed_metabolite_names == "Fixed Metabolite Names":
+                    if node.visible_by_mouse:
+                        if node.node_type == "reaction":
+                            pygame.draw.rect(display, (0, 200, 200), node.rect)
+                            if self.show_reaction_names == "Reaction Names":
                                 text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
-                                text_rect = text_surface.get_rect(center=node.rect.center)
+                                text_rect = text_surface.get_rect()
+                                text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
                                 display.blit(text_surface, text_rect)
-                            elif self.show_fixed_metabolite_names == "Fixed Metabolite IDs":
+                            elif self.show_reaction_names == "Reaction IDs":
                                 text_surface = self.font.render(node.instance.id, True, (255, 255, 255))
-                                text_rect = text_surface.get_rect(center=node.rect.center)
+                                text_rect = text_surface.get_rect()
+                                text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
                                 display.blit(text_surface, text_rect)
-                            elif self.show_fixed_metabolite_names == "No Fixed Names":
-                               pass
-                        else:
-                            if self.show_metabolite_names == "Metabolite Names":
-                                text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
-                                text_rect = text_surface.get_rect(center=node.rect.center)
-                                display.blit(text_surface, text_rect)
-                            elif self.show_metabolite_names == "Metabolite IDs":
-                                text_surface = self.font.render(node.instance.id, True, (255, 255, 255))
-                                text_rect = text_surface.get_rect(center=node.rect.center)
-                                display.blit(text_surface, text_rect)
-                            elif self.show_metabolite_names == "No Names":
+                            elif self.show_reaction_names == "No names":
                                 pass
-                    elif node.node_type == "compartment":
-                        for idx, compartment in enumerate(self.compartments):
-                            if node.instance == compartment and self.show_compartments:
-                                rect = node.rect
-                                # Drawing lines for the cross inside the rectangle
-                                pygame.draw.rect(display,  (50+ (idx*50) % 255, 80, 80), node.rect)
-                                pygame.draw.line(display, (255, 255, 255), (rect.x, rect.y), (rect.x + rect.width, rect.y + rect.height), 3)
-                                pygame.draw.line(display, (255, 255, 255), (rect.x + rect.width, rect.y), (rect.x, rect.y + rect.height), 3)
-
+                        elif node.node_type == "metabolite":
+                            for idx, compartment in enumerate(self.compartments):
+                                if node.instance.compartment == compartment.id:
+                                    pygame.draw.rect(display, (50 + (idx * 50) % 255, 50, 50), node.rect)
+                            if node.instance.fixed_node_input or node.instance.fixed_node_output:
+                                if self.show_fixed_metabolite_names == "Fixed Metabolite Names":
+                                    text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
+                                    text_rect = text_surface.get_rect()
+                                    text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                                    display.blit(text_surface, text_rect)
+                                elif self.show_fixed_metabolite_names == "Fixed Metabolite IDs":
+                                    text_surface = self.font.render(node.instance.id, True, (255, 255, 255))
+                                    text_rect = text_surface.get_rect()
+                                    text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                                    display.blit(text_surface, text_rect)
+                                elif self.show_fixed_metabolite_names == "No Fixed Names":
+                                    pass
+                            else:
+                                if self.show_metabolite_names == "Metabolite Names":
+                                    text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
+                                    text_rect = text_surface.get_rect()
+                                    text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                                    display.blit(text_surface, text_rect)
+                                elif self.show_metabolite_names == "Metabolite IDs":
+                                    text_surface = self.font.render(node.instance.id, True, (255, 255, 255))
+                                    text_rect = text_surface.get_rect()
+                                    text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                                    display.blit(text_surface, text_rect)
+                                elif self.show_metabolite_names == "No Names":
+                                    pass
+                        elif node.node_type == "compartment":
+                            for idx, compartment in enumerate(self.compartments):
+                                if node.instance == compartment and self.show_compartments:
+                                    rect = node.rect
+                                    # Drawing lines for the cross inside the rectangle
+                                    pygame.draw.rect(display, (50 + (idx * 50) % 255, 80, 80), node.rect)
+                                    pygame.draw.line(display, (255, 255, 255), (rect.x, rect.y), (rect.x + rect.width, rect.y + rect.height), 3)
+                                    pygame.draw.line(display, (255, 255, 255), (rect.x + rect.width, rect.y), (rect.x, rect.y + rect.height), 3)
 
                 # compartment legends
                 for idx, compartment in enumerate(self.compartments):
-                    rect = pygame.Rect(width-50,50 + idx*50,15,15)
-                    pygame.draw.rect(display, (50+ (idx*50) % 255, 50, 50), rect)
-                    text_surface = self.font2.render(str(compartment.name), True,(50+ (idx*50) % 255, 50, 50) )
-                    text_rect = text_surface.get_rect(center =( width-100, 58 + (idx*50)))
+                    rect = pygame.Rect(width - 50, 50 + idx * 50, 15, 15)
+                    pygame.draw.rect(display, (50 + (idx * 50) % 255, 50, 50), rect)
+                    text_surface = self.font2.render(str(compartment.name), True, (50 + (idx * 50) % 255, 50, 50))
+                    text_rect = text_surface.get_rect(center=(width - 100, 58 + (idx * 50)))
                     display.blit(text_surface, text_rect)
 
                 if self.show_lines:
                     for idx, node in enumerate(self.all_network_nodes):
-                        for idx2 in range(1, len(self.edge_logic_dict["reaction_metabolite_attraction"][idx])):
-                            if self.edge_logic_dict["reaction_metabolite_attraction"][idx2][idx] == 1:
-                                x_start = self.all_network_nodes[idx2].x
-                                y_start = self.all_network_nodes[idx2].y
-                                x_end = self.all_network_nodes[idx].x
-                                y_end = self.all_network_nodes[idx].y
-                                pygame.draw.line(display, (255, 255, 255), (x_start, y_start), (x_end, y_end))
+                        if node.visible_by_mouse:
+                            for idx2 in range(1, len(self.edge_logic_dict["draw_lines_connections"][idx])):
+                                if self.edge_logic_dict["draw_lines_connections"][idx2][idx] == 1 :
+                                    if self.all_network_nodes[idx2].visible_by_mouse:
+                                        x_start = self.all_network_nodes[idx2].x
+                                        y_start = self.all_network_nodes[idx2].y
+                                        x_end = self.all_network_nodes[idx].x
+                                        y_end = self.all_network_nodes[idx].y
+                                        # pygame.draw.line(display, (255, 255, 255), (x_start, y_start), (x_end, y_end))
+                                        self.draw_arrow_head((x_start, y_start), (x_end,y_end), display)
+                if self.show_flux_expression == "Fluxes":
+                    for node in self.all_network_nodes:
+                        if node.node_type == "reaction":
+                            try:
+                                text_surface = self.font.render(str(self.fluxes_dict[node.instance.id]), True, (255, 0, 0))
+                                text_rect = text_surface.get_rect()
+                                text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] +self.rect_size)
+                                display.blit(text_surface, text_rect)
+                            except:
+                                pass
+                elif self.show_flux_expression == "Expression":
+                    for node in self.all_network_nodes:
+                        if node.node_type == "reaction":
+                            try:
+                                text_surface = self.font.render(str(self.expression_dict[node.instance.id]), True, (0, 255, 0))
+                                text_rect = text_surface.get_rect()
+                                text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] -self.rect_size)
+                                display.blit(text_surface, text_rect)
+                            except:
+                                pass
+                elif self.show_flux_expression == "Both flux and expression":
+                    for node in self.all_network_nodes:
+                        if node.node_type == "reaction":
+                            try:
+                                text_surface = self.font.render(str(self.fluxes_dict[node.instance.id]), True, (255, 0,0))
+                                text_rect = text_surface.get_rect()
+                                text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] +self.rect_size)
+                                display.blit(text_surface, text_rect)
+                                text_surface = self.font.render(str(self.expression_dict[node.instance.id]), True, (0, 255, 0))
+                                text_rect = text_surface.get_rect()
+                                text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] -self.rect_size)
+                                display.blit(text_surface, text_rect)
+                            except Exception as e:
+                                pass
                 pygame.display.flip()
 
             self.calculate_forces_through_network()
@@ -618,6 +715,27 @@ class MetabolicNetwork:
             #     running = False
         if pygame_on:
             pygame.quit()
+
+    def draw_arrow_head(self,start,end, display):
+        dx = end[0] - start[0]
+        dy = end[1] - start[1]
+        angle = math.atan2(dy, dx)
+        arrow_len = 15
+        arrow_angle = math.pi / 6
+
+        arrow1 = (end[0] - arrow_len * math.cos(angle - arrow_angle),
+                  end[1] - arrow_len * math.sin(angle - arrow_angle))
+        arrow2 = (end[0] - arrow_len * math.cos(angle + arrow_angle),
+                  end[1] - arrow_len * math.sin(angle + arrow_angle))
+
+        pygame.draw.line(display, (255, 255, 255), (start[0], start[1]), (end[0], end[1]))
+        pygame.draw.polygon(display, (255,255,255), (end, arrow1, arrow2))
+
+    def pygame_draw_network_code(self, display):
+        pass
+
+    def pygame_event_handling_code(self):
+        pass
 
     def calculate_distance_matrix(self):
         coordinates = np.array([(obj.x, obj.y) for obj in self.all_network_nodes])
@@ -638,67 +756,71 @@ class MetabolicNetwork:
                 node.x += node.x_vector * SMALL_CONSTANT
                 node.x = node.x % width
                 node.y += node.y_vector * SMALL_CONSTANT
-                node.y = node.y %height
+                node.y = node.y % height
             if node.x > width:
                 node.x = width
             elif node.x < 0:
-                node.x =0
+                node.x = 0
             if node.y > width:
                 node.y = width
-            elif node.y <0:
+            elif node.y < 0:
                 node.y = 0
 
-            node.rect.update(node.x, node.y, self.rect_size, self.rect_size)
+            node.rect.update(node.x-(self.rect_size)/2, node.y-(self.rect_size)/2, self.rect_size, self.rect_size)
+
     def calculate_forces_through_network(self):
         distance_matrix, angle_matrix = self.calculate_distance_matrix()
-        distance_matrix = distance_matrix+1
+        distance_matrix = distance_matrix + 1
         cos_angles = np.cos(angle_matrix)
         sin_angles = np.sin(angle_matrix)
 
         # # General repulsion
         np.fill_diagonal(distance_matrix, 1000000)
-        force_magnitudes =  (200/ np.power(np.sqrt(distance_matrix), 2))
+        force_magnitudes = (200 / np.power(np.sqrt(distance_matrix), 2))
         force_magnitudes = np.where(force_magnitudes < 0.0000000001, 0, force_magnitudes)
         x_forces = np.sum(force_magnitudes * cos_angles * self.normal_repulsion_value * self.edge_logic_dict["normal_repulsion"], axis=1)
         y_forces = np.sum(force_magnitudes * sin_angles * self.normal_repulsion_value * self.edge_logic_dict["normal_repulsion"], axis=1)
 
-
         # Compartment repulsion
-        force_magnitudes = 30000 / np.power(np.sqrt(distance_matrix), 2)
+        force_magnitudes = 300 / np.power(np.sqrt(distance_matrix), 1)
         force_magnitudes = np.where(force_magnitudes < 0.0000001, 0, force_magnitudes)
-        x_forces = x_forces + np.sum(force_magnitudes * cos_angles * self.comp_comp_repulsion_value * self.edge_logic_dict["compartment_compartment_repulsion"], axis = 1)
-        y_forces = y_forces + np.sum(force_magnitudes * sin_angles * self.comp_comp_repulsion_value * self.edge_logic_dict["compartment_compartment_repulsion"], axis=1)
+        x_forces = x_forces + np.sum(force_magnitudes * cos_angles * self.comp_comp_repulsion_value * self.edge_logic_dict["compartment_compartment_repulsion"],
+                                     axis=1)
+        y_forces = y_forces + np.sum(force_magnitudes * sin_angles * self.comp_comp_repulsion_value * self.edge_logic_dict["compartment_compartment_repulsion"],
+                                     axis=1)
 
         # Fixed metabolite repulsion
-        force_magnitudes = 9000 / np.power(np.sqrt(distance_matrix), 2)
+        force_magnitudes = 3000 / np.power(np.sqrt(distance_matrix), 2)
         force_magnitudes = np.where(force_magnitudes < 0.0000001, 0, force_magnitudes)
-        x_forces = x_forces + np.sum(force_magnitudes * cos_angles * self.fixed_metabolite_repulsion_value * self.edge_logic_dict["fixed_metabolite_repulsion"], axis = 1)
-
+        x_forces = x_forces + np.sum(force_magnitudes * cos_angles * self.fixed_metabolite_repulsion_value * self.edge_logic_dict["fixed_metabolite_repulsion"],
+                                     axis=1)
 
         # Boundary Repulsion
-        force_magnitudes = 500000 / np.power(np.sqrt(distance_matrix), 4)
+        force_magnitudes = 500000 / np.power(np.sqrt(distance_matrix), 5)
         force_magnitudes = np.where(force_magnitudes < 0.0000001, 0, force_magnitudes)
-        x_forces = x_forces + np.sum(force_magnitudes * cos_angles * self.boundary_repulsion_value * self.edge_logic_dict["boundary_repulsion"], axis = 1)
+        x_forces = x_forces + np.sum(force_magnitudes * cos_angles * self.boundary_repulsion_value * self.edge_logic_dict["boundary_repulsion"], axis=1)
         y_forces = y_forces + np.sum(force_magnitudes * sin_angles * self.boundary_repulsion_value * self.edge_logic_dict["boundary_repulsion"], axis=1)
 
         # rxn_met attraction
         np.fill_diagonal(distance_matrix, 0)
-        force_magnitudes = -np.power(distance_matrix, 1)/10
+        force_magnitudes = -np.power(distance_matrix, 1) / 10
         force_magnitudes = np.where(force_magnitudes > -0.0001, 0, force_magnitudes)
-        x_forces = x_forces + np.sum(force_magnitudes * cos_angles * self.rxn_met_attraction_value * self.edge_logic_dict["reaction_metabolite_attraction"], axis = 1)
-        y_forces = y_forces + np.sum(force_magnitudes * sin_angles * self.rxn_met_attraction_value * self.edge_logic_dict["reaction_metabolite_attraction"], axis=1)
+        x_forces = x_forces + np.sum(force_magnitudes * cos_angles * self.rxn_met_attraction_value * self.edge_logic_dict["reaction_metabolite_attraction"],
+                                     axis=1)
+        y_forces = y_forces + np.sum(force_magnitudes * sin_angles * self.rxn_met_attraction_value * self.edge_logic_dict["reaction_metabolite_attraction"],
+                                     axis=1)
 
         # met_comp attraction
-        force_magnitudes = -np.power(distance_matrix, 1)/20
+        force_magnitudes = -np.power(distance_matrix, 1) / 20
         force_magnitudes = np.where(force_magnitudes > -0.0001, 0, force_magnitudes)
-        x_forces = x_forces + np.sum(force_magnitudes * cos_angles * self.metabolite_compartment_attraction_value * self.edge_logic_dict["metabolite_compartment_attraction"], axis = 1)
-        y_forces = y_forces + np.sum(force_magnitudes * sin_angles * self.metabolite_compartment_attraction_value * self.edge_logic_dict["metabolite_compartment_attraction"], axis=1)
+        x_forces = x_forces + np.sum(
+            force_magnitudes * cos_angles * self.metabolite_compartment_attraction_value * self.edge_logic_dict["metabolite_compartment_attraction"], axis=1)
+        y_forces = y_forces + np.sum(
+            force_magnitudes * sin_angles * self.metabolite_compartment_attraction_value * self.edge_logic_dict["metabolite_compartment_attraction"], axis=1)
 
         for node, x_force, y_force in zip(self.all_network_nodes, x_forces, y_forces):
             node.x_vector = x_force
             node.y_vector = y_force
-
-
 
     def extract_non_pseudo_nodes_and_edges(self):
         # remove
@@ -717,7 +839,6 @@ class Application:
 
         # Create a StringVar to store the selected file path
         self.entry_var = tk.StringVar()
-        self.entry_var_excel_file =tk.StringVar()
 
         # Create and place widgets
         label = tk.Label(self.root, text="Selected File:")
@@ -736,6 +857,16 @@ class Application:
         self.network_window = None
 
         self.selected_option = tk.StringVar()
+
+
+    def check_queue(self):
+        while True:
+            try:
+                action = self.met_network.queue.get(block=False)
+                self.root.after(0, action)
+            except queue.Empty:
+                break
+        self.root.after(100, self.check_queue)  # Repeat periodically
 
     def browse_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
@@ -758,7 +889,7 @@ class Application:
 
                 # Open a new window for JSON data visualization
                 self.parse_json_metabolic_network_data(json_data)
-                self.met_network = MetabolicNetwork(self.list_nodes_metabolites, self.list_edges_reactions)
+                self.met_network = MetabolicNetwork(self.list_nodes_metabolites, self.list_edges_reactions, self)
                 # self.upload_button.destroy()
                 # self.browse_button.destroy()
                 self.create_GUI_after_loading()
@@ -790,9 +921,13 @@ class Application:
         self.create_show_unshow_lines_button()
         self.create_show_unshow_compartments_button()
         self.create_browse_and_upload_excel_file()
+        self.create_show_flux_expression_checkbutton()
+        self.create_update_visible_button()
+
         width_ = self.root.winfo_width()
         height_ = self.root.winfo_height()
-        self.root.geometry(f"{width_}x{height_}+0+0")
+        self.root.geometry(f"{width_ + 270}x{height_+50}+0+0")
+        self.check_queue()
 
     def parse_json_metabolic_network_data(self, json_data):
         self.list_edges_reactions = []
@@ -818,12 +953,13 @@ class Application:
                     self.list_edges_reactions.append(ReactionEdges(reaction_id, reaction_name, reaction_metabolites, reaction_lb, reaction_ub))
 
     def create_load_network_button(self):
-        self.load_network_button = tk.Button(self.root, text="(re)load network", command=self.load_network)
-        self.load_network_button.grid(row=3, column=2, padx=10, pady=5)
+        self.load_network_button = tk.Button(self.root, text="load network", command=self.load_network)
+        self.load_network_button.grid(row=3, column=2, padx=10, pady=5, sticky = "ew")
 
     def load_network(self):
         self.met_network.calculate_network()
-        #self.create_and_draw_network_canvas()
+        # self.create_and_draw_network_canvas()
+        self.create_listboxes_visibility()
 
     def create_and_draw_network_canvas(self):
         # Replace this function with your network drawing logic
@@ -836,15 +972,11 @@ class Application:
         except:
             pass
 
-        self.canvas = tk.Canvas(self.network_window, width= self.WIDTH, height=self.HEIGHT)
+        self.canvas = tk.Canvas(self.network_window, width=self.WIDTH, height=self.HEIGHT)
         self.draw_network(self.canvas)
         self.canvas.place(in_=self.network_window, x=0, y=0)
 
-        # nodes =
-        # edges
-
     def create_listboxes(self):
-
         label1 = tk.Label(self.root, text="included")
         label1.grid(row=0, column=0, padx=10, pady=5)
         self.left_list = tk.Listbox(self.root, width=20, height=20)
@@ -854,8 +986,8 @@ class Application:
         self.right_list = tk.Listbox(self.root, width=20, height=20)
         self.right_list.grid(row=1, column=1, padx=10, pady=5)
 
-        self.names_left = [name.name for name in self.met_network.included_metabolites]
-        self.names_right = [name.name for name in self.met_network.not_included_metabolites]
+        self.names_left = [name.name for name in self.met_network.part_of_physics_metabolites]
+        self.names_right = [name.name for name in self.met_network.not_part_of_physics_metabolites]
 
         for item in self.names_left:
             self.left_list.insert(tk.END, item)
@@ -865,16 +997,21 @@ class Application:
         self.left_list.bind('<Double-Button-1>', lambda event: self.on_double_click(event, self.left_list, self.right_list))
         self.right_list.bind('<Double-Button-1>', lambda event: self.on_double_click(event, self.right_list, self.left_list))
 
-
     def move_item(self, event, from_list, to_list):
-        selected_item = from_list.get(from_list.curselection())
-        to_list.insert(tk.END, selected_item)
-        from_list.delete(from_list.curselection())
-
+        try:
+            selected_item = from_list.get(from_list.curselection())
+            to_list.insert(tk.END, selected_item)
+            from_list.delete(from_list.curselection())
+        except:
+            pass
     def on_double_click(self, event, from_list, to_list):
         self.move_item(event, from_list, to_list)
-        self.met_network.included_metabolites = [self.met_network.find_metabolite(met) for met in self.left_list.get("0", tk.END)]
-        self.met_network.not_included_metabolites = [self.met_network.find_metabolite(met) for met in self.right_list.get("0", tk.END)]
+        self.met_network.part_of_physics_metabolites = [self.met_network.find_metabolite(met) for met in self.left_list.get("0", tk.END)]
+        self.met_network.not_part_of_physics_metabolites = [self.met_network.find_metabolite(met) for met in self.right_list.get("0", tk.END)]
+        try:
+            self.met_network.update_edge_network()
+        except Exception as e:
+            print(e)
 
     def update_slider(self, value):
         value = int(value)
@@ -883,9 +1020,13 @@ class Application:
         self.left_list.destroy()
         self.met_network.update_included_not_included_based_on_slider()
         self.create_listboxes()
+        try:
+            self.met_network.update_edge_network()
+        except:
+            pass
 
     def create_slider(self):
-        label = tk.Label(self.root, text="Metabolites with more connections are excluded")
+        label = tk.Label(self.root, text="Metabolites with equal or more connections are excluded")
         label.grid(row=2, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
 
         scale = tk.Scale(self.root, from_=self.met_network.slider_start, to=self.met_network.slider_end, orient=tk.HORIZONTAL, command=self.update_slider)
@@ -893,7 +1034,7 @@ class Application:
         scale.set(self.met_network.slider_value)
 
     def create_slider_normal_repulsion(self):
-        #self.root.grid_rowconfigure(1, weight=1, maxsize=50)  # Adjust minsize as needed
+        # self.root.grid_rowconfigure(1, weight=1, maxsize=50)  # Adjust minsize as needed
         label = tk.Label(self.root, text="Normal Repulsion")
         label.grid(row=2, column=3, columnspan=2, padx=10, pady=5, sticky="ew")
 
@@ -901,11 +1042,8 @@ class Application:
         scale.grid(row=3, column=3, columnspan=2, padx=10, pady=5, sticky="ew")
         scale.set(self.met_network.normal_repulsion_value)
 
-
     def update_normal_repulsion_slider(self, value):
         self.met_network.normal_repulsion_value = int(value)
-        # self.met_network.stop_simulation()
-        # self.met_network.start_simulation()
 
     def create_slider_comp_comp_repulsion(self):
         # self.root.grid_rowconfigure(1, weight=1, maxsize=50)  # Adjust minsize as needed
@@ -915,10 +1053,9 @@ class Application:
         scale = tk.Scale(self.root, from_=0, to=50000, orient=tk.HORIZONTAL, command=self.update_comp_comp_repulsion_slider)
         scale.grid(row=5, column=3, columnspan=2, padx=10, pady=5, sticky="ew")
         scale.set(self.met_network.comp_comp_repulsion_value)
+
     def update_comp_comp_repulsion_slider(self, value):
         self.met_network.comp_comp_repulsion_value = int(value)
-        # self.met_network.stop_simulation()
-        # self.met_network.start_simulation()
 
     def create_slider_boundary_repulsion(self):
         # self.root.grid_rowconfigure(1, weight=1, maxsize=50)  # Adjust minsize as needed
@@ -928,10 +1065,9 @@ class Application:
         scale = tk.Scale(self.root, from_=0, to=50000, orient=tk.HORIZONTAL, command=self.update_boundary_repulsion_slider)
         scale.grid(row=7, column=3, columnspan=2, padx=10, pady=5, sticky="ew")
         scale.set(self.met_network.boundary_repulsion_value)
+
     def update_boundary_repulsion_slider(self, value):
         self.met_network.boundary_repulsion_value = int(value)
-        # self.met_network.stop_simulation()
-        # self.met_network.start_simulation()
 
     def create_slider_rxn_met_attraction_slider(self):
         # self.root.grid_rowconfigure(1, weight=1, maxsize=50)  # Adjust minsize as needed
@@ -941,6 +1077,7 @@ class Application:
         scale = tk.Scale(self.root, from_=0, to=50000, orient=tk.HORIZONTAL, command=self.update_rxn_met_attraction_slider)
         scale.grid(row=11, column=3, columnspan=2, padx=10, pady=5, sticky="ew")
         scale.set(self.met_network.rxn_met_attraction_value)
+
     def update_rxn_met_attraction_slider(self, value):
         self.met_network.rxn_met_attraction_value = int(value)
         # self.met_network.stop_simulation()
@@ -952,12 +1089,11 @@ class Application:
         label.grid(row=12, column=3, columnspan=2, padx=10, pady=5, sticky="ew")
 
         scale = tk.Scale(self.root, from_=0, to=50000, orient=tk.HORIZONTAL, command=self.update_met_comp_slider)
-        scale.grid(row= 13, column=3, columnspan=2, padx=10, pady=5, sticky="ew")
+        scale.grid(row=13, column=3, columnspan=2, padx=10, pady=5, sticky="ew")
         scale.set(self.met_network.metabolite_compartment_attraction_value)
+
     def update_met_comp_slider(self, value):
         self.met_network.metabolite_compartment_attraction_value = int(value)
-        # self.met_network.stop_simulation()
-        # self.met_network.start_simulation()
 
     def create_slider_fixed_metabolite_slider(self):
         # self.root.grid_rowconfigure(1, weight=1, maxsize=50)  # Adjust minsize as needed
@@ -970,38 +1106,41 @@ class Application:
 
     def update_fixed_metabolite_repulsion_slider(self, value):
         self.met_network.fixed_metabolite_repulsion_value = int(value)
-        # self.met_network.stop_simulation()
-        # self.met_network.start_simulation()
 
     def create_stop_simulation_button(self):
-        button = tk.Button(self.root, text = "stop simulation", command =self.on_stop_simulation_button_click)
-        button.grid(row=4, column =1, padx =5, pady = 5, sticky = "ew")
+        button = tk.Button(self.root, text="stop simulation", command=self.on_stop_simulation_button_click)
+        button.grid(row=4, column=2, padx=5, pady=5, sticky="ew")
+
     def on_stop_simulation_button_click(self):
         self.stop_simulation()
+
     def stop_simulation(self):
         global running
         running = False
 
     def create_freeze_all_nodes_button(self):
-        button = tk.Button(self.root, text = "Freeze all nodes", command =self.on_freeze_all_nodes_button_click)
-        button.grid(row=5, column =1, padx =5, pady = 5, sticky = "ew")
+        button = tk.Button(self.root, text="Freeze all nodes", command=self.on_freeze_all_nodes_button_click)
+        button.grid(row=5, column=1, padx=5, pady=5, sticky="ew")
+
     def on_freeze_all_nodes_button_click(self):
         for node in self.met_network.all_network_nodes:
             node.fixed_by_mouse = True
 
     def create_unfreeze_all_nodes_button(self):
-        button = tk.Button(self.root, text = "Unfreeze all nodes", command =self.on_unfreeze_all_nodes_button_click)
-        button.grid(row=6, column =1, padx =5, pady = 5, sticky = "ew")
+        button = tk.Button(self.root, text="Unfreeze all nodes", command=self.on_unfreeze_all_nodes_button_click)
+        button.grid(row=6, column=1, padx=5, pady=5, sticky="ew")
+
     def on_unfreeze_all_nodes_button_click(self):
         for node in self.met_network.all_network_nodes:
             node.fixed_by_mouse = False
 
     def create_font_size_slider(self):
         label = tk.Label(self.root, text="Fontsize")
-        label.grid(row = 7, column =0 , columnspan =2, padx = 10 ,pady = 5, sticky = "ew")
-        slider = tk.Scale(self.root,  from_ = 1,orient= tk.HORIZONTAL, to = 50, command = self.on_font_size_slider)
-        slider.grid(row = 8, column = 0, columnspan =2 , padx = 10, pady= 5, sticky = "ew")
+        label.grid(row=7, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        slider = tk.Scale(self.root, from_=1, orient=tk.HORIZONTAL, to=50, command=self.on_font_size_slider)
+        slider.grid(row=8, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
         slider.set(self.met_network.font_size)
+
     def on_font_size_slider(self, value):
         try:
             self.met_network.font = pygame.font.SysFont(None, int(value))
@@ -1010,10 +1149,11 @@ class Application:
 
     def create_rect_size_slider(self):
         label = tk.Label(self.root, text="Rectangle size")
-        label.grid(row = 9, column =0 , columnspan =2, padx = 10 ,pady = 5, sticky = "ew")
-        slider = tk.Scale(self.root,  from_ = 1, to = 50, orient= tk.HORIZONTAL, command = self.on_rect_size_slider)
-        slider.grid(row = 10, column = 0, columnspan =2 , padx = 10, pady= 5, sticky = "ew")
+        label.grid(row=9, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        slider = tk.Scale(self.root, from_=1, to=50, orient=tk.HORIZONTAL, command=self.on_rect_size_slider)
+        slider.grid(row=10, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
         slider.set(self.met_network.font_size)
+
     def on_rect_size_slider(self, value):
         self.met_network.rect_size = int(value)
 
@@ -1030,77 +1170,173 @@ class Application:
     def create_reaction_name_checkbutton(self):
         self.selected_option = tk.StringVar(self.root, "Reaction Names")
         option_frame = tk.LabelFrame(self.root, text="Show rxn names options")
-        option_frame.grid(row = 13, column = 0, padx = 10, pady = 5, sticky = "ew")
+        option_frame.grid(row=13, column=0, padx=10, pady=5, sticky="ew")
         options = ["No Names", "Reaction Names", "Reaction IDs"]
         for idx, option in enumerate(options):
-            tk.Radiobutton(option_frame, text=option, variable=self.selected_option, value=option, command=self.on_reaction_name_checkbutton).grid(row=idx, column=0,sticky = tk.W)
-    def on_reaction_name_checkbutton(self ):
+            tk.Radiobutton(option_frame, text=option, variable=self.selected_option, value=option, command=self.on_reaction_name_checkbutton).grid(row=idx,
+                                                                                                                                                   column=0,
+                                                                                                                                                   sticky=tk.W)
+    def on_reaction_name_checkbutton(self):
         option = self.selected_option.get()
         self.met_network.show_reaction_names = option
-
 
     def create_metabolite_name_checkbutton(self):
         self.selected_option_metabolite = tk.StringVar(self.root, "No Names")
         option_frame = tk.LabelFrame(self.root, text="Show met names options")
-        option_frame.grid(row = 13, column = 1, padx = 10, pady = 5, sticky = "ew")
+        option_frame.grid(row=13, column=1, padx=10, pady=5, sticky="ew")
         options = ["No Names", "Metabolite Names", "Metabolite IDs"]
         for idx, option in enumerate(options):
-            tk.Radiobutton(option_frame, text=option, variable=self.selected_option_metabolite, value=option, command=self.on_metabolite_name_checkbutton).grid(row=idx, column=1, sticky = tk.W)
+            tk.Radiobutton(option_frame, text=option, variable=self.selected_option_metabolite, value=option, command=self.on_metabolite_name_checkbutton).grid(
+                row=idx, column=1, sticky=tk.W)
+
     def on_metabolite_name_checkbutton(self):
         option = self.selected_option_metabolite.get()
         self.met_network.show_metabolite_names = option
 
-
     def create_fixed_metabolite_name_checkbutton(self):
         self.selected_option_fixed_metabolite = tk.StringVar(self.root, "No Fixed Names")
         option_frame = tk.LabelFrame(self.root, text="Show fixed met names options")
-        option_frame.grid(row = 14, column = 0, padx = 10, pady = 5, sticky = "ew")
+        option_frame.grid(row=14, column=0, padx=10, pady=5, sticky="ew")
         options = ["No Fixed Names", "Fixed Metabolite Names", "Fixed Metabolite IDs"]
         for idx, option in enumerate(options):
-            tk.Radiobutton(option_frame, text=option, variable=self.selected_option_fixed_metabolite, value=option, command=self.on_fixed_metabolite_name_checkbutton).grid(row=idx, column=0, sticky = tk.W)
+            tk.Radiobutton(option_frame, text=option, variable=self.selected_option_fixed_metabolite, value=option,
+                           command=self.on_fixed_metabolite_name_checkbutton).grid(row=idx, column=0, sticky=tk.W)
+
     def on_fixed_metabolite_name_checkbutton(self):
         option = self.selected_option_fixed_metabolite.get()
         self.met_network.show_fixed_metabolite_names = option
 
+    def create_show_flux_expression_checkbutton(self):
+        self.selected_option_flux_expression = tk.StringVar(self.root, "None")
+        option_frame = tk.LabelFrame(self.root, text="Show fixed met names options")
+        option_frame.grid(row=14, column=1, padx=10, pady=5, sticky="ew")
+        options = ["None", "Fluxes", "Expression", "Both flux and expression"]
+        for idx, option in enumerate(options):
+            tk.Radiobutton(option_frame, text=option, variable=self.selected_option_flux_expression, value=option,
+                           command=self.on_show_flux_expression_checkbutton).grid(row=idx, column=0, sticky=tk.W)
+
+    def on_show_flux_expression_checkbutton(self):
+        option = self.selected_option_flux_expression.get()
+        self.met_network.show_flux_expression = option
+        print(option)
 
     def create_show_unshow_lines_button(self):
-        button = tk.Button(self.root, text = "show/unshow lines toggle", command =self.on_show_unshow_lines_button_click)
-        button.grid(row=4, column =0, padx =5, pady = 5, sticky = "ew")
+        button = tk.Button(self.root, text="show/unshow lines toggle", command=self.on_show_unshow_lines_button_click)
+        button.grid(row=4, column=0, padx=5, pady=5, sticky="ew")
+
     def on_show_unshow_lines_button_click(self):
         self.met_network.show_lines = not self.met_network.show_lines
 
+    def create_update_visible_button(self):
+        button = tk.Button(self.root, text="Update visibility based on included metabolites", command=self.on_update_visible_button_click)
+        button.grid(row=4, column=1, padx=5, pady=5, sticky="ew")
+
+    def on_update_visible_button_click(self):
+        try:
+            for node in self.met_network.all_network_nodes:
+                if node.instance in [met for met in self.met_network.part_of_physics_metabolites]:
+                    node.visible_by_mouse = True
+                elif node.instance in [met for met in self.met_network.not_part_of_physics_metabolites]:
+                    node.visible_by_mouse = False
+        except:
+            pass
+        self.create_listboxes_visibility()
     def create_show_unshow_compartments_button(self):
-        button = tk.Button(self.root, text = "show/unshow compartments toggle", command =self.on_show_unshow_compartments_button_click)
-        button.grid(row=5, column =0, padx =5, pady = 5, sticky = "ew")
+        button = tk.Button(self.root, text="show/unshow compartments toggle", command=self.on_show_unshow_compartments_button_click)
+        button.grid(row=5, column=0, padx=5, pady=5, sticky="ew")
+
     def on_show_unshow_compartments_button_click(self):
         self.met_network.show_compartments = not self.met_network.show_compartments
 
     def create_browse_and_upload_excel_file(self):
-        self.entry = tk.Entry(self.root, textvariable=self.entry_var_excel_file, state = "readonly")
-        self.entry.grid(row = 1, column = 2 , padx =10, pady = 5, sticky = "ew")
+        self.entry_var_excel_file = tk.StringVar(self.root)
+        self.var_excel_file_path = tk.StringVar(self.root)
 
-        button = tk.Button(self.root, text = "Browse excel File", command = self.on_browse_excel_file)
-        button.grid(row = 8, column =2, padx = 10, pady = 5, sticky = "ew")
+        self.entry2 = tk.Entry(self.root, textvariable=self.entry_var_excel_file, state="readonly", width=40)
+        self.entry2.grid(row=7, column=2, padx=10, pady=0, sticky="ew")
 
-        button2 = tk.Button(self.root, text = "Upload excel File", command = self.on_upload_excel_file)
-        button2.grid(row = 9, column =2, padx = 10, pady = 5, sticky = "ew")
+        button = tk.Button(self.root, text="Browse excel File", command=self.on_browse_excel_file)
+        button.grid(row=8, column=2, padx=10, pady=15, sticky="ew")
+
+        button2 = tk.Button(self.root, text="Upload excel File", command=self.on_upload_excel_file)
+        button2.grid(row=9, column=2, padx=10, pady=0, sticky="ew")
 
     def on_browse_excel_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xls;*.xlsx")])
         if file_path:
-            self.entry_var_excel_file.set(file_path)
-            self.entry.delete(0, tk.END)
-            self.entry.insert(0, file_path)
+            self.entry_var_excel_file.set(os.path.basename(file_path))
+            self.var_excel_file_path.set(file_path)
 
     def on_upload_excel_file(self):
-        file_path = self.entry_var_excel_file.get()
+        file_path = self.var_excel_file_path.get()
         try:
             with open(file_path, 'r') as file:
-                # Read JSON data
-                self.met_network.df = pd.read_excel(file_path)
+                # Read excel data
+                self.met_network.df_fluxes_reactions = pd.read_excel(file_path, header = None)
+                self.check_if_correct_fluxes_reactions_file()
         except FileNotFoundError:
             print("File not found.")
 
+    def check_if_correct_fluxes_reactions_file(self):
+        columns_to_convert = [1, 2]
+        for col_idx in columns_to_convert:
+            self.met_network.df_fluxes_reactions.iloc[:, col_idx] = pd.to_numeric(self.met_network.df_fluxes_reactions.iloc[:, col_idx], errors='coerce')
+        selected_columns = self.met_network.df_fluxes_reactions.iloc[:, [1, 2 ]]  # Adjust column indices as per your DataFrame
+        are_numeric = selected_columns.iloc[:, [0, 1]].apply(pd.to_numeric, errors='coerce').notnull().all()
+        has_temp_exchange = self.met_network.df_fluxes_reactions.iloc[:, 3].str.startswith(('temporary_exchange', 'MAR')).any()
+        if are_numeric.all() and has_temp_exchange:
+            self.create_fluxes_and_expression_dicts()
+        else:
+            print("bad excel file uploaded")
+            self.met_network.df_fluxes_reactions = pd.DataFrame()
+
+    def create_fluxes_and_expression_dicts(self):
+        self.met_network.df_fluxes_reactions = self.met_network.df_fluxes_reactions.iloc[:, [1, 2, 3 ]]
+        self.met_network.df_fluxes_reactions.columns = ["fluxes", "expression", "reaction"]
+        for index, row in self.met_network.df_fluxes_reactions.iterrows():
+            value_2 = row["expression"]
+            value_1 = row["fluxes"]
+            value_3 = row["reaction"]
+            if '[' in value_3:
+                value_3 = value_3.split('[')[0]
+
+            self.met_network.fluxes_dict[str(value_3)] = round(value_1,3)
+            self.met_network.expression_dict[str(value_3)] = round(value_2,3)
+
+    def create_listboxes_visibility(self):
+        label1 = tk.Label(self.root, text="visible")
+        label1.grid(row=0, column=2, padx=10, pady=5)
+        self.left_list_visibility = tk.Listbox(self.root, width=20, height=20)
+        self.left_list_visibility.grid(row=1, column=2, padx=10, pady=5)
+        label2 = tk.Label(self.root, text="not visible")
+        label2.grid(row=0, column=3, padx=10, pady=5)
+        self.right_list_visibility= tk.Listbox(self.root, width=20, height=20)
+        self.right_list_visibility.grid(row=1, column=3, padx=10, pady=5)
+
+        self.names_left_visibility = [node.instance.name if isinstance(node.instance, MetaboliteNodes) else node.instance.id for node in self.met_network.all_network_nodes if not isinstance(node.instance, BoundaryNode) and node.visible_by_mouse]
+        self.names_right_visibility =[node.instance.name if isinstance(node.instance, MetaboliteNodes) else node.instance.id for node in self.met_network.all_network_nodes if not isinstance(node.instance, BoundaryNode) and not node.visible_by_mouse]
+
+        for item in self.names_left_visibility:
+            self.left_list_visibility.insert(tk.END, item)
+        for item in self.names_right_visibility:
+            self.right_list_visibility.insert(tk.END, item)
+
+        self.left_list_visibility.bind('<Double-Button-1>', lambda event: self.on_double_click_visibility(event, self.left_list_visibility, self.right_list_visibility))
+        self.right_list_visibility.bind('<Double-Button-1>', lambda event: self.on_double_click_visibility(event, self.right_list_visibility, self.left_list_visibility))
+
+    def move_item_visibility(self, event, from_list, to_list):
+        try:
+            selected_item = from_list.get(from_list.curselection())
+            for node in self.met_network.all_network_nodes:
+                if not isinstance(node.instance, BoundaryNode) and (node.instance.id == selected_item or node.instance.name == selected_item):
+                    node.visible_by_mouse = not node.visible_by_mouse
+            to_list.insert(tk.END, selected_item)
+            from_list.delete(from_list.curselection())
+        except:
+            pass
+
+    def on_double_click_visibility(self, event, from_list, to_list):
+        self.move_item_visibility(event, from_list, to_list)
     def draw_network(self, canvas):
         # Draw nodes
         node_radius = 5
@@ -1115,7 +1351,7 @@ class Application:
             for edge_idx in range(len(edges)):
                 x1 = self.met_network.all_network_nodes[idx].x
                 y1 = self.met_network.all_network_nodes[idx].y
-                if edges[edge_idx] ==1:
+                if edges[edge_idx] == 1:
                     x2 = self.met_network.all_network_nodes[edge_idx].x
                     y2 = self.met_network.all_network_nodes[edge_idx].y
                     canvas.create_line(x1, y1, x2, y2, fill='black')
@@ -1123,8 +1359,8 @@ class Application:
 
 # Create the main Tkinter window
 root = tk.Tk()
-width = 1200
-height = 900
+width = 1500
+height = 1200
 running = False
 # Create an instance of the JSONViewer class
 TK_application = Application(root, width, height)
