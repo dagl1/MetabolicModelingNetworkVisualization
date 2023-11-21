@@ -9,8 +9,8 @@ import tkinter as tk
 from tkinter import filedialog
 import threading
 import queue
-import copy
 import openpyxl
+import pickle
 
 
 def print_hi(name):
@@ -118,15 +118,17 @@ class NetworkNodesForPhysicsSimulation:
         self.rect = pygame.Rect(self.x, self.y, 15, 15)
         self.fixed_by_mouse = False
         self.visible_by_mouse = True
+        # Unfortunately necessary to make sure all lines are drawn (something goes wrong with indicing
+        if isinstance(self.instance, MetaboliteNodes) and self.instance.id == "fake":
+            self.visible_by_mouse = False
 
     def find_input_and_output_instances(self):
         if isinstance(self.instance, ReactionEdges):
             for metabolite, stoichiometry in self.instance.metabolites.items():
-                if metabolite in [metabolit.id for metabolit in self.met_network.included_metabolites] and stoichiometry < 0:
+                if metabolite in [metabolit.id for metabolit in self.met_network.included_metabolites] and stoichiometry > 0:
                     self.input_instances.append(self.met_network.find_metabolite(metabolite))
-                elif metabolite in [metabolit.id for metabolit in self.met_network.included_metabolites] and stoichiometry > 0:
+                elif metabolite in [metabolit.id for metabolit in self.met_network.included_metabolites] and stoichiometry < 0:
                     self.output_instances.append(self.met_network.find_metabolite(metabolite))
-
         elif isinstance(self.instance, MetaboliteNodes):
             for reaction in self.instance.reactions:
                 reaction_ = self.met_network.find_reaction(reaction)
@@ -153,7 +155,7 @@ class MetabolicNetwork:
         self.commonly_excluded_names = []  # ["H+", "H2O", "NADH", "NAD+", "NADP+", "NADPH", "FAD", "FADH", "CO2"]
         self.included_metabolites = []
         self.not_included_metabolites = []
-        self.part_of_physics_metabolites=[]
+        self.part_of_physics_metabolites = []
         self.not_part_of_physics_metabolites = []
         self.create_lookup_dicts()
         self.update_included_not_included_based_on_slider()
@@ -179,6 +181,35 @@ class MetabolicNetwork:
         self.df_fluxes_reactions = pd.DataFrame()
         self.fluxes_dict = {}
         self.expression_dict = {}
+
+
+    def save_as_json(self):
+        node_xy_save_dict = {}
+        for node in self.all_network_nodes:
+            if not isinstance(node.instance, BoundaryNode):
+                node_xy_save_dict[node.instance.id] = (node.x,node.y)
+
+        # self.fluxes_dict
+        # self.expression_dict
+        # freeze all mets at loading
+        # xy coordinates of each node
+        full_json_dict = {}
+        full_json_dict["fluxes_dict"] = self.fluxes_dict
+        full_json_dict["expression_dict"] = self.expression_dict
+        full_json_dict["node_xy_save_dict"] = node_xy_save_dict
+        print(full_json_dict)
+        pass
+
+    def read_from_json(self):
+        json_dict = {} # placehold
+        for idx, element in enumerate(json_dict):
+            if isinstance(element, dict):
+                #logic for loading regular dict >> check for fluxes, expression, nodes
+                pass
+            elif isinstance(element, list):
+                #logic for checking if from escher and loading the necessary files.
+                pass
+
 
     def filter_input_output_reactions(self):
         reaction_edges_copy = []
@@ -289,6 +320,10 @@ class MetabolicNetwork:
         self.slider_end = highest_value
         self.slider_value = math.floor(highest_value * 0.8)
 
+    def restart_simulation(self):
+        simulation_thread = threading.Thread(target=self.run_network_simulation)
+        simulation_thread.start()
+
     def calculate_network(self):
         # Create compartment_pseudo_reaction_nodes:
         self.create_compartment_pseudo_reaction_nodes()
@@ -321,6 +356,9 @@ class MetabolicNetwork:
                     self.compartments[idx].metabolites.append(metabolite)
 
     def create_network_nodes_for_simulation(self):
+        # Add a fake metabolite, unfortunately necessary for making sure all lines are drawn correctly (weirdly enough)
+        self.included_metabolites.insert(0, MetaboliteNodes("fake", "fake", self.compartments[0]))
+
         self.all_network_nodes = []
         # Create all types of nodes
         id_number = 0
@@ -488,12 +526,12 @@ class MetabolicNetwork:
         for node in self.all_network_nodes:
             edge = [node.id_number]
             if node.node_type == "reaction" or node.node_type == "metabolite":
-                for input_node in node.input_instances:
-                    for temp_node in self.all_network_nodes:
-                        if input_node == temp_node.instance:
-                            connected_node_id_number = temp_node.id_number
-                            edge.append(connected_node_id_number)
-                            break
+                # for input_node in node.input_instances:
+                #     for temp_node in self.all_network_nodes:
+                #         if input_node == temp_node.instance:
+                #             connected_node_id_number = temp_node.id_number
+                #             edge.append(connected_node_id_number)
+                #             break
                 for output_node in node.output_instances:
                     for temp_node in self.all_network_nodes:
                         if output_node == temp_node.instance:
@@ -716,11 +754,11 @@ class MetabolicNetwork:
         if pygame_on:
             pygame.quit()
 
-    def draw_arrow_head(self,start,end, display):
+    def draw_arrow_head(self,end,start, display):
         dx = end[0] - start[0]
         dy = end[1] - start[1]
         angle = math.atan2(dy, dx)
-        arrow_len = 15
+        arrow_len = max(3, self.rect_size-6)
         arrow_angle = math.pi / 6
 
         arrow1 = (end[0] - arrow_len * math.cos(angle - arrow_angle),
@@ -923,6 +961,9 @@ class Application:
         self.create_browse_and_upload_excel_file()
         self.create_show_flux_expression_checkbutton()
         self.create_update_visible_button()
+        self.create_restart_latest_simulation()
+        self.create_save_latest_simulation()
+        self.create_load_previously_made_model()
 
         width_ = self.root.winfo_width()
         height_ = self.root.winfo_height()
@@ -953,7 +994,7 @@ class Application:
                     self.list_edges_reactions.append(ReactionEdges(reaction_id, reaction_name, reaction_metabolites, reaction_lb, reaction_ub))
 
     def create_load_network_button(self):
-        self.load_network_button = tk.Button(self.root, text="load network", command=self.load_network)
+        self.load_network_button = tk.Button(self.root, text="Start Simulation", command=self.load_network)
         self.load_network_button.grid(row=3, column=2, padx=10, pady=5, sticky = "ew")
 
     def load_network(self):
@@ -1108,7 +1149,7 @@ class Application:
         self.met_network.fixed_metabolite_repulsion_value = int(value)
 
     def create_stop_simulation_button(self):
-        button = tk.Button(self.root, text="stop simulation", command=self.on_stop_simulation_button_click)
+        button = tk.Button(self.root, text="Stop simulation", command=self.on_stop_simulation_button_click)
         button.grid(row=4, column=2, padx=5, pady=5, sticky="ew")
 
     def on_stop_simulation_button_click(self):
@@ -1221,11 +1262,36 @@ class Application:
         print(option)
 
     def create_show_unshow_lines_button(self):
-        button = tk.Button(self.root, text="show/unshow lines toggle", command=self.on_show_unshow_lines_button_click)
+        button = tk.Button(self.root, text="Show/unshow lines toggle", command=self.on_show_unshow_lines_button_click)
         button.grid(row=4, column=0, padx=5, pady=5, sticky="ew")
 
     def on_show_unshow_lines_button_click(self):
         self.met_network.show_lines = not self.met_network.show_lines
+
+    def create_restart_latest_simulation(self):
+        button = tk.Button(self.root, text="Restart the latest simulation", command=self.on_restart_latest_simulation_click)
+        button.grid(row=6, column=2, padx=5, pady=5, sticky="ew")
+
+    def on_restart_latest_simulation_click(self):
+        self.met_network.restart_simulation()
+
+    def create_save_latest_simulation(self):
+        button = tk.Button(self.root, text="Save latest simulation as .json", command=self.on_save_latest_simulation_click)
+        button.grid(row=7, column=2, padx=5, pady=5, sticky="ew")
+
+    def on_save_latest_simulation_click(self):
+        data_to_save = self.met_network.save_as_json()
+        file_path = filedialog.asksaveasfilename(defaultextension=".json" , filetypes=[("JSON files", "*.json")])
+        #
+        # with open(file_path, 'wb') as file:
+        #     pickle.dump(self.met_network.included_metabolites, file)
+
+    def create_load_previously_made_model(self):
+        button = tk.Button(self.root, text="Load previously made JSON model", command=self.on_load_previously_made_model_click)
+        button.grid(row=8, column=2, padx=5, pady=5, sticky="ew")
+
+    def on_load_previously_made_model_click(self):
+        pass
 
     def create_update_visible_button(self):
         button = tk.Button(self.root, text="Update visibility based on included metabolites", command=self.on_update_visible_button_click)
@@ -1242,7 +1308,7 @@ class Application:
             pass
         self.create_listboxes_visibility()
     def create_show_unshow_compartments_button(self):
-        button = tk.Button(self.root, text="show/unshow compartments toggle", command=self.on_show_unshow_compartments_button_click)
+        button = tk.Button(self.root, text="Show/unshow compartments toggle", command=self.on_show_unshow_compartments_button_click)
         button.grid(row=5, column=0, padx=5, pady=5, sticky="ew")
 
     def on_show_unshow_compartments_button_click(self):
@@ -1253,13 +1319,13 @@ class Application:
         self.var_excel_file_path = tk.StringVar(self.root)
 
         self.entry2 = tk.Entry(self.root, textvariable=self.entry_var_excel_file, state="readonly", width=40)
-        self.entry2.grid(row=7, column=2, padx=10, pady=0, sticky="ew")
+        self.entry2.grid(row=10, column=2, padx=10, pady=0, sticky="ew")
 
         button = tk.Button(self.root, text="Browse excel File", command=self.on_browse_excel_file)
-        button.grid(row=8, column=2, padx=10, pady=15, sticky="ew")
+        button.grid(row=11, column=2, padx=10, pady=15, sticky="ew")
 
         button2 = tk.Button(self.root, text="Upload excel File", command=self.on_upload_excel_file)
-        button2.grid(row=9, column=2, padx=10, pady=0, sticky="ew")
+        button2.grid(row=12, column=2, padx=10, pady=0, sticky="ew")
 
     def on_browse_excel_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xls;*.xlsx")])
@@ -1313,8 +1379,10 @@ class Application:
         self.right_list_visibility= tk.Listbox(self.root, width=20, height=20)
         self.right_list_visibility.grid(row=1, column=3, padx=10, pady=5)
 
-        self.names_left_visibility = [node.instance.name if isinstance(node.instance, MetaboliteNodes) else node.instance.id for node in self.met_network.all_network_nodes if not isinstance(node.instance, BoundaryNode) and node.visible_by_mouse]
-        self.names_right_visibility =[node.instance.name if isinstance(node.instance, MetaboliteNodes) else node.instance.id for node in self.met_network.all_network_nodes if not isinstance(node.instance, BoundaryNode) and not node.visible_by_mouse]
+        self.names_left_visibility = [node.instance.name if isinstance(node.instance, MetaboliteNodes) else node.instance.id for node in
+                                      self.met_network.all_network_nodes if not isinstance(node.instance, BoundaryNode) and node.visible_by_mouse and node.instance.id !="fake"]
+        self.names_right_visibility =[node.instance.name if isinstance(node.instance, MetaboliteNodes) else node.instance.id for node in
+                                      self.met_network.all_network_nodes if not isinstance(node.instance, BoundaryNode) and not node.visible_by_mouse and node.instance.id != "fake"]
 
         for item in self.names_left_visibility:
             self.left_list_visibility.insert(tk.END, item)
