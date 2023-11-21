@@ -121,6 +121,7 @@ class NetworkNodesForPhysicsSimulation:
         # Unfortunately necessary to make sure all lines are drawn (something goes wrong with indicing
         if isinstance(self.instance, MetaboliteNodes) and self.instance.id == "fake":
             self.visible_by_mouse = False
+        self.highlighted_by_mouse = False
 
     def find_input_and_output_instances(self):
         if isinstance(self.instance, ReactionEdges):
@@ -181,6 +182,7 @@ class MetabolicNetwork:
         self.df_fluxes_reactions = pd.DataFrame()
         self.fluxes_dict = {}
         self.expression_dict = {}
+        self.full_json_dict = {}
 
 
     def save_as_json(self):
@@ -193,23 +195,31 @@ class MetabolicNetwork:
         # self.expression_dict
         # freeze all mets at loading
         # xy coordinates of each node
-        full_json_dict = {}
-        full_json_dict["fluxes_dict"] = self.fluxes_dict
-        full_json_dict["expression_dict"] = self.expression_dict
-        full_json_dict["node_xy_save_dict"] = node_xy_save_dict
-        print(full_json_dict)
+        self.full_json_dict = {}
+        self.full_json_dict["fluxes_dict"] = self.fluxes_dict
+        self.full_json_dict["expression_dict"] = self.expression_dict
+        self.full_json_dict["node_xy_save_dict"] = node_xy_save_dict
+        #print(self.full_json_dict)
         pass
 
-    def read_from_json(self):
-        json_dict = {} # placehold
-        for idx, element in enumerate(json_dict):
+    def read_from_json(self,data):
+        json_dict = data# placehold
+        is_visual_json = False
+        for key_,  element in json_dict.items():
             if isinstance(element, dict):
-                #logic for loading regular dict >> check for fluxes, expression, nodes
-                pass
+                for key, value in json_dict.items():
+                    if key == "fluxes_dict":
+                        is_visual_json = True
+
             elif isinstance(element, list):
                 #logic for checking if from escher and loading the necessary files.
                 pass
-
+        for key_, element in json_dict.items():
+            if isinstance(element,dict):
+                if is_visual_json:
+                    self.full_json_dict[key_] = element
+        if is_visual_json:
+            self.calculate_network(is_visual_json)
 
     def filter_input_output_reactions(self):
         reaction_edges_copy = []
@@ -324,7 +334,7 @@ class MetabolicNetwork:
         simulation_thread = threading.Thread(target=self.run_network_simulation)
         simulation_thread.start()
 
-    def calculate_network(self):
+    def calculate_network(self, load_from_json=False):
         # Create compartment_pseudo_reaction_nodes:
         self.create_compartment_pseudo_reaction_nodes()
         self.create_network_nodes_for_simulation()
@@ -332,9 +342,20 @@ class MetabolicNetwork:
         # create edge matrices
         self.create_edges_matrices_dicts()
         self.update_edge_network()
-
+        print('aaaa')
         # set initial x, y positions for non-boundary nodes
         self.set_x_y_positions_non_boundary_nodes()
+        if load_from_json:
+            print('dddd')
+            for node in self.all_network_nodes:
+                if node.node_type != "boundary":
+                    key = node.instance.id
+                    x,y = self.full_json_dict["node_xy_save_dict"][key]
+                    node.x = x
+                    node.y = y
+            for node in self.all_network_nodes:
+                node.fixed_by_mouse = True
+
 
         # run network
         simulation_thread = threading.Thread(target=self.run_network_simulation)
@@ -357,7 +378,8 @@ class MetabolicNetwork:
 
     def create_network_nodes_for_simulation(self):
         # Add a fake metabolite, unfortunately necessary for making sure all lines are drawn correctly (weirdly enough)
-        self.included_metabolites.insert(0, MetaboliteNodes("fake", "fake", self.compartments[0]))
+        if self.included_metabolites[0].id == "fake":
+            self.included_metabolites.insert(0, MetaboliteNodes("fake", "fake", self.compartments[0]))
 
         self.all_network_nodes = []
         # Create all types of nodes
@@ -585,7 +607,8 @@ class MetabolicNetwork:
 
             self.font = pygame.font.SysFont(None, self.font_size)
             self.font2 = pygame.font.SysFont(None, 28)
-            key_actions = {"left_mouse_clicked": False, "right_mouse_clicked": False, "middle_mouse_clicked": False}
+            key_actions = {"left_mouse_clicked": False, "right_mouse_clicked": False, "middle_mouse_clicked": False,
+                           "shift_clicked": False, "v_clicked": False, "s_clicked": False}
         while running:
             if pygame_on:
                 display.fill((0, 0, 0))
@@ -595,8 +618,46 @@ class MetabolicNetwork:
                     elif event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_F1:
                             running = False
+                        elif event.key == pygame.K_LSHIFT:
+                            key_actions["shift_clicked"] = True
+                        elif event.key == pygame.K_v:
+                            key_actions["v_clicked"] = True
+                        elif event.key == pygame.K_s:
+                            key_actions["s_clicked"] = True
+                    elif event.type == pygame.KEYUP:
+                        if event.key == pygame.K_LSHIFT:
+                            key_actions["shift_clicked"] = False
+                        elif event.key == pygame.K_v:
+                            key_actions["v_clicked"] = False
+                        elif event.key == pygame.K_s:
+                            key_actions["s_clicked"] = False
                     elif event.type == pygame.MOUSEBUTTONDOWN:
-                        if event.button == 1:
+                        if event.button == 1 and key_actions["s_clicked"]:
+                            for node in self.all_network_nodes:
+                                mouse_pos = pygame.mouse.get_pos()
+                                if node.rect.collidepoint(mouse_pos):
+                                    if node.highlighted_by_mouse == True:
+                                        # code for splitting nodes
+                                        pass
+                                    break
+
+                        elif event.button == 1 and key_actions["shift_clicked"]:
+                            mouse_pos = pygame.mouse.get_pos()
+                            for node in self.all_network_nodes:
+                                if node.rect.collidepoint(mouse_pos):
+                                    node.highlighted_by_mouse = not node.highlighted_by_mouse
+                                    break
+                            pass
+
+                        elif event.button == 1 and key_actions["v_clicked"]:
+                            mouse_pos = pygame.mouse.get_pos()
+                            for node in self.all_network_nodes:
+                                if node.rect.collidepoint(mouse_pos):
+                                    node.visible_by_mouse = not node.visible_by_mouse
+                                    self.queue.put(self.tk_application.create_listboxes)
+                                    self.queue.put(self.tk_application.create_listboxes_visibility)
+                                    break
+                        elif event.button == 1:
                             key_actions["left_mouse_clicked"] = True
                             mouse_pos = pygame.mouse.get_pos()
                             for node in self.all_network_nodes:
@@ -612,7 +673,6 @@ class MetabolicNetwork:
                                     node.visible_by_mouse = not node.visible_by_mouse
                                     self.queue.put(self.tk_application.create_listboxes)
                                     self.queue.put(self.tk_application.create_listboxes_visibility)
-
                                     break
                         elif event.button == 3:
                             key_actions["right_mouse_clicked"] = True
@@ -639,6 +699,10 @@ class MetabolicNetwork:
                     if node.visible_by_mouse:
                         if node.node_type == "reaction":
                             pygame.draw.rect(display, (0, 200, 200), node.rect)
+                            if node.highlighted_by_mouse:
+                                outer_rect = node.rect.inflate(10, 10)
+                                outer_color = (255, 0, 0)
+                                pygame.draw.rect(display, outer_color, outer_rect,2)  # Inn
                             if self.show_reaction_names == "Reaction Names":
                                 text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
                                 text_rect = text_surface.get_rect()
@@ -652,9 +716,13 @@ class MetabolicNetwork:
                             elif self.show_reaction_names == "No names":
                                 pass
                         elif node.node_type == "metabolite":
+                            if node.highlighted_by_mouse:
+                                outer_rect = node.rect.inflate(10, 10)
+                                outer_color = (255, 0, 0)
+                                pygame.draw.rect(display, outer_color, outer_rect,2)  # Inn
                             for idx, compartment in enumerate(self.compartments):
                                 if node.instance.compartment == compartment.id:
-                                    pygame.draw.rect(display, (50 + (idx * 50) % 255, 50, 50), node.rect)
+                                    pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), node.rect)
                             if node.instance.fixed_node_input or node.instance.fixed_node_output:
                                 if self.show_fixed_metabolite_names == "Fixed Metabolite Names":
                                     text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
@@ -686,15 +754,15 @@ class MetabolicNetwork:
                                 if node.instance == compartment and self.show_compartments:
                                     rect = node.rect
                                     # Drawing lines for the cross inside the rectangle
-                                    pygame.draw.rect(display, (50 + (idx * 50) % 255, 80, 80), node.rect)
+                                    pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), node.rect)
                                     pygame.draw.line(display, (255, 255, 255), (rect.x, rect.y), (rect.x + rect.width, rect.y + rect.height), 3)
                                     pygame.draw.line(display, (255, 255, 255), (rect.x + rect.width, rect.y), (rect.x, rect.y + rect.height), 3)
 
                 # compartment legends
                 for idx, compartment in enumerate(self.compartments):
                     rect = pygame.Rect(width - 50, 50 + idx * 50, 15, 15)
-                    pygame.draw.rect(display, (50 + (idx * 50) % 255, 50, 50), rect)
-                    text_surface = self.font2.render(str(compartment.name), True, (50 + (idx * 50) % 255, 50, 50))
+                    pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), rect)
+                    text_surface = self.font2.render(str(compartment.name), True, (50 + (idx * 50) % 255, 100, 0))
                     text_rect = text_surface.get_rect(center=(width - 100, 58 + (idx * 50)))
                     display.blit(text_surface, text_rect)
 
@@ -708,8 +776,11 @@ class MetabolicNetwork:
                                         y_start = self.all_network_nodes[idx2].y
                                         x_end = self.all_network_nodes[idx].x
                                         y_end = self.all_network_nodes[idx].y
+                                        color_ = (255,255,255)
+
+
                                         # pygame.draw.line(display, (255, 255, 255), (x_start, y_start), (x_end, y_end))
-                                        self.draw_arrow_head((x_start, y_start), (x_end,y_end), display)
+                                        self.draw_arrow_head((x_start, y_start), (x_end,y_end), display, color_)
                 if self.show_flux_expression == "Fluxes":
                     for node in self.all_network_nodes:
                         if node.node_type == "reaction":
@@ -754,7 +825,7 @@ class MetabolicNetwork:
         if pygame_on:
             pygame.quit()
 
-    def draw_arrow_head(self,end,start, display):
+    def draw_arrow_head(self,end,start, display, color_):
         dx = end[0] - start[0]
         dy = end[1] - start[1]
         angle = math.atan2(dy, dx)
@@ -1249,7 +1320,7 @@ class Application:
 
     def create_show_flux_expression_checkbutton(self):
         self.selected_option_flux_expression = tk.StringVar(self.root, "None")
-        option_frame = tk.LabelFrame(self.root, text="Show fixed met names options")
+        option_frame = tk.LabelFrame(self.root, text="Show Excel flux/expression")
         option_frame.grid(row=14, column=1, padx=10, pady=5, sticky="ew")
         options = ["None", "Fluxes", "Expression", "Both flux and expression"]
         for idx, option in enumerate(options):
@@ -1280,18 +1351,22 @@ class Application:
         button.grid(row=7, column=2, padx=5, pady=5, sticky="ew")
 
     def on_save_latest_simulation_click(self):
-        data_to_save = self.met_network.save_as_json()
+        self.met_network.save_as_json()
         file_path = filedialog.asksaveasfilename(defaultextension=".json" , filetypes=[("JSON files", "*.json")])
-        #
-        # with open(file_path, 'wb') as file:
-        #     pickle.dump(self.met_network.included_metabolites, file)
+
+        with open(file_path, "w") as file:
+            json.dump(self.met_network.full_json_dict, file, indent =4)
 
     def create_load_previously_made_model(self):
         button = tk.Button(self.root, text="Load previously made JSON model", command=self.on_load_previously_made_model_click)
         button.grid(row=8, column=2, padx=5, pady=5, sticky="ew")
 
     def on_load_previously_made_model_click(self):
-        pass
+        file_path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
+        with open(file_path, 'r') as file:
+            data = json.load(file)
+            self.met_network.read_from_json(data)
+
 
     def create_update_visible_button(self):
         button = tk.Button(self.root, text="Update visibility based on included metabolites", command=self.on_update_visible_button_click)
