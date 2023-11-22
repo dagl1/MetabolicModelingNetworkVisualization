@@ -11,6 +11,7 @@ import threading
 import queue
 import openpyxl
 import pickle
+import copy
 
 
 def print_hi(name):
@@ -122,7 +123,7 @@ class NetworkNodesForPhysicsSimulation:
         if isinstance(self.instance, MetaboliteNodes) and self.instance.id == "fake":
             self.visible_by_mouse = False
         self.highlighted_by_mouse = False
-
+        self.split_of_nodes_partners =  []
     def find_input_and_output_instances(self):
         if isinstance(self.instance, ReactionEdges):
             for metabolite, stoichiometry in self.instance.metabolites.items():
@@ -342,11 +343,9 @@ class MetabolicNetwork:
         # create edge matrices
         self.create_edges_matrices_dicts()
         self.update_edge_network()
-        print('aaaa')
         # set initial x, y positions for non-boundary nodes
         self.set_x_y_positions_non_boundary_nodes()
         if load_from_json:
-            print('dddd')
             for node in self.all_network_nodes:
                 if node.node_type != "boundary":
                     key = node.instance.id
@@ -636,9 +635,9 @@ class MetabolicNetwork:
                             for node in self.all_network_nodes:
                                 mouse_pos = pygame.mouse.get_pos()
                                 if node.rect.collidepoint(mouse_pos):
-                                    if node.highlighted_by_mouse == True:
-                                        # code for splitting nodes
-                                        pass
+                                    self.split_node_based_on_highlighted_connections(node)
+                                    self.update_edge_network()
+                                    pass
                                     break
 
                         elif event.button == 1 and key_actions["shift_clicked"]:
@@ -693,6 +692,11 @@ class MetabolicNetwork:
                     try:
                         selected_node.x = mouse_pos[0]
                         selected_node.y = mouse_pos[1]
+                        if len(selected_node.split_of_nodes_partners)>0:
+                            for node in self.all_network_nodes:
+                                if node in selected_node.split_of_nodes_partners:
+                                    if node.rect.colliderect(selected_node.rect):
+                                        selected_node= self.merge_split_nodes_back_together(selected_node, node)
                     except:
                         pass
                 for idx, node in enumerate(self.all_network_nodes):
@@ -931,6 +935,77 @@ class MetabolicNetwork:
             node.x_vector = x_force
             node.y_vector = y_force
 
+    def split_node_based_on_highlighted_connections(self, node):
+        connected_output_instances = []
+        connected_input_instances = []
+        for instance in node.output_instances:
+            connected_output_instances.append(instance)
+        for instance in node.input_instances:
+            connected_input_instances.append(instance)
+        to_split_off_input_instances =[]
+        to_split_off_output_instances =[]
+        to_split_off_output_nodes = []
+        to_split_off_input_nodes = []
+        for other_node in self.all_network_nodes:
+            if other_node.instance in connected_output_instances and other_node.highlighted_by_mouse:
+                to_split_off_output_instances.append(other_node.instance)
+
+                to_split_off_output_nodes.append(other_node)
+                try:
+                    node.output_instances.remove(other_node.instance)
+                except:
+                    pass
+            elif other_node.instance in connected_input_instances and other_node.highlighted_by_mouse:
+                to_split_off_input_instances.append(other_node.instance)
+                to_split_off_input_nodes.append(other_node)
+                try:
+                    node.input_instances.remove(other_node.instance)
+                except:
+                    pass
+        #remove other nodes from node
+        #remove node from alternative nodes that connect to current node
+        current_node_instance = node.instance
+
+        # create new node with connected nodes and similiar id ?
+        if len(to_split_off_output_instances)>0 or len(to_split_off_input_instances)>0:
+            id_number = len(self.all_network_nodes)
+            new_current_node_instance = copy.deepcopy(current_node_instance)
+
+            self.all_network_nodes.append(NetworkNodesForPhysicsSimulation(node.x + 20, node.y+20, node.instance,id_number,self ))
+            self.all_network_nodes[-1].split_of_nodes_partners = node.split_of_nodes_partners.copy()
+            self.all_network_nodes[-1].split_of_nodes_partners.append(node)
+
+            for alt_node in node.split_of_nodes_partners:
+                alt_node.split_of_nodes_partners.append(self.all_network_nodes[-1])
+            node.split_of_nodes_partners.append(self.all_network_nodes[-1])
+            current_node_instance.id = current_node_instance.id + "_" + str(len(self.all_network_nodes[-1].split_of_nodes_partners))
+            current_node_instance.name = current_node_instance.name + "_" + str(len(self.all_network_nodes[-1].split_of_nodes_partners))
+            new_current_node_instance.id = new_current_node_instance.id + "_" + str(len(self.all_network_nodes[-1].split_of_nodes_partners)+1)
+            new_current_node_instance.name = new_current_node_instance.name + "_" + str(len(self.all_network_nodes[-1].split_of_nodes_partners)+1)
+            self.all_network_nodes[-1].instance = new_current_node_instance
+            self.all_network_nodes[-1].input_instances = to_split_off_input_instances
+            self.all_network_nodes[-1].output_instances = to_split_off_output_instances
+
+            for other_instance, other_node in zip(to_split_off_output_instances, to_split_off_output_nodes):
+                try:
+                    other_node.input_instances.append(self.all_network_nodes[-1].instance)
+                    other_node.input_instances.remove(current_node_instance)
+                except:
+                    pass
+            for other_instance, other_node in zip(to_split_off_input_instances, to_split_off_input_nodes):
+                try:
+                    other_node.output_instances.append(self.all_network_nodes[-1].instance)
+                    other_node.output_instances.remove(current_node_instance)
+                except:
+                    pass
+
+    def merge_split_nodes_back_together(self, node1, node2):
+        # find lowest number id instance and combine into that one
+        # combine all input/output instances
+        # update the partners list
+        # adjust partner id number if 0 in partners list
+        remaining_node = node1 # PLACHOLDER
+        return remaining_node
     def extract_non_pseudo_nodes_and_edges(self):
         # remove
         nodes, edges = 0, 0
@@ -1330,7 +1405,6 @@ class Application:
     def on_show_flux_expression_checkbutton(self):
         option = self.selected_option_flux_expression.get()
         self.met_network.show_flux_expression = option
-        print(option)
 
     def create_show_unshow_lines_button(self):
         button = tk.Button(self.root, text="Show/unshow lines toggle", command=self.on_show_unshow_lines_button_click)
