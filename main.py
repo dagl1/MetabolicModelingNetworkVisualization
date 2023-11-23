@@ -12,7 +12,7 @@ import queue
 import openpyxl
 import pickle
 import copy
-
+import re
 
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
@@ -184,6 +184,7 @@ class MetabolicNetwork:
         self.fluxes_dict = {}
         self.expression_dict = {}
         self.full_json_dict = {}
+        self.zoom_factor = 1
 
 
     def save_as_json(self):
@@ -200,7 +201,6 @@ class MetabolicNetwork:
         self.full_json_dict["fluxes_dict"] = self.fluxes_dict
         self.full_json_dict["expression_dict"] = self.expression_dict
         self.full_json_dict["node_xy_save_dict"] = node_xy_save_dict
-        #print(self.full_json_dict)
         pass
 
     def read_from_json(self,data):
@@ -529,6 +529,7 @@ class MetabolicNetwork:
     def update_edge_network(self):
         self.create_edges_matrices_dicts()
         idx_list = []
+
         for node in self.all_network_nodes:
             if node.node_type == "metabolite" and node.instance in [met for met in self.not_part_of_physics_metabolites]:
                 idx_list.append(node.id_number)
@@ -560,6 +561,7 @@ class MetabolicNetwork:
                             edge.append(connected_node_id_number)
                             break
             edges.append(edge)
+
         for edge in edges:
             node_id = edge[0]
             connected_nodes = edge[1:]
@@ -603,11 +605,12 @@ class MetabolicNetwork:
             os.environ['SDL_VIDEO_WINDOW_POS'] = '1020,30'
             pygame.init()
             display = pygame.display.set_mode([1500, 1200])
-
+            self.viewport = pygame.Rect(0, 0, 1500, 1200)
             self.font = pygame.font.SysFont(None, self.font_size)
             self.font2 = pygame.font.SysFont(None, 28)
             key_actions = {"left_mouse_clicked": False, "right_mouse_clicked": False, "middle_mouse_clicked": False,
-                           "shift_clicked": False, "v_clicked": False, "s_clicked": False}
+                           "shift_clicked": False, "v_clicked": False, "s_clicked": False, "up_clicked": False, "down_clicked": False,
+                           "right_clicked": False, "left_clicked": False}
         while running:
             if pygame_on:
                 display.fill((0, 0, 0))
@@ -619,10 +622,26 @@ class MetabolicNetwork:
                             running = False
                         elif event.key == pygame.K_LSHIFT:
                             key_actions["shift_clicked"] = True
+                        elif event.key == pygame.K_m:
+                            self.zoom_factor +=1
+                            if self.zoom_factor >10:
+                                self.zoom_factor = 10
+                        elif event.key ==  pygame.K_l:
+                            self.zoom_factor -= 1
+                            if self.zoom_factor <1:
+                                self.zoom_factor = 1
                         elif event.key == pygame.K_v:
                             key_actions["v_clicked"] = True
                         elif event.key == pygame.K_s:
                             key_actions["s_clicked"] = True
+                        elif event.key == pygame.K_UP:
+                            key_actions["up_clicked"] = True
+                        elif event.key == pygame.K_DOWN:
+                            key_actions["down_clicked"] = True
+                        elif event.key == pygame.K_LEFT:
+                            key_actions["left_clicked"] = True
+                        elif event.key == pygame.K_RIGHT:
+                            key_actions["right_clicked"] = True
                     elif event.type == pygame.KEYUP:
                         if event.key == pygame.K_LSHIFT:
                             key_actions["shift_clicked"] = False
@@ -630,26 +649,42 @@ class MetabolicNetwork:
                             key_actions["v_clicked"] = False
                         elif event.key == pygame.K_s:
                             key_actions["s_clicked"] = False
+                        elif event.key == pygame.K_UP:
+                            key_actions["up_clicked"] = False
+                        elif event.key == pygame.K_DOWN:
+                            key_actions["down_clicked"] = False
+                        elif event.key == pygame.K_LEFT:
+                            key_actions["left_clicked"] = False
+                        elif event.key == pygame.K_RIGHT:
+                            key_actions["right_clicked"] = False
+
                     elif event.type == pygame.MOUSEBUTTONDOWN:
                         if event.button == 1 and key_actions["s_clicked"]:
                             for node in self.all_network_nodes:
                                 mouse_pos = pygame.mouse.get_pos()
+                                scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
+                                scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
+                                mouse_pos = (scaled_mouse_x,scaled_mouse_y)
                                 if node.rect.collidepoint(mouse_pos):
                                     self.split_node_based_on_highlighted_connections(node)
                                     self.update_edge_network()
-                                    pass
                                     break
 
                         elif event.button == 1 and key_actions["shift_clicked"]:
                             mouse_pos = pygame.mouse.get_pos()
+                            scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
+                            scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
+                            mouse_pos = (scaled_mouse_x, scaled_mouse_y)
                             for node in self.all_network_nodes:
                                 if node.rect.collidepoint(mouse_pos):
                                     node.highlighted_by_mouse = not node.highlighted_by_mouse
                                     break
-                            pass
 
                         elif event.button == 1 and key_actions["v_clicked"]:
                             mouse_pos = pygame.mouse.get_pos()
+                            scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
+                            scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
+                            mouse_pos = (scaled_mouse_x, scaled_mouse_y)
                             for node in self.all_network_nodes:
                                 if node.rect.collidepoint(mouse_pos):
                                     node.visible_by_mouse = not node.visible_by_mouse
@@ -659,6 +694,9 @@ class MetabolicNetwork:
                         elif event.button == 1:
                             key_actions["left_mouse_clicked"] = True
                             mouse_pos = pygame.mouse.get_pos()
+                            scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
+                            scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
+                            mouse_pos = (scaled_mouse_x, scaled_mouse_y)
                             for node in self.all_network_nodes:
                                 if node.rect.collidepoint(mouse_pos):
                                     node.fixed_by_mouse = True
@@ -667,6 +705,9 @@ class MetabolicNetwork:
                         elif event.button == 2:
                             key_actions["middle_mouse_clicked"] = True
                             mouse_pos = pygame.mouse.get_pos()
+                            scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
+                            scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
+                            mouse_pos = (scaled_mouse_x, scaled_mouse_y)
                             for node in self.all_network_nodes:
                                 if node.rect.collidepoint(mouse_pos):
                                     node.visible_by_mouse = not node.visible_by_mouse
@@ -676,6 +717,9 @@ class MetabolicNetwork:
                         elif event.button == 3:
                             key_actions["right_mouse_clicked"] = True
                             mouse_pos = pygame.mouse.get_pos()
+                            scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
+                            scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
+                            mouse_pos = (scaled_mouse_x, scaled_mouse_y)
                             for node in self.all_network_nodes:
                                 if node.rect.collidepoint(mouse_pos):
                                     node.fixed_by_mouse = not node.fixed_by_mouse
@@ -686,9 +730,20 @@ class MetabolicNetwork:
                             selected_node = None
                         elif event.button == 3:
                             key_actions["right_mouse_clicked"] = False
+                if key_actions["up_clicked"]:
+                    self.viewport.y -=5
+                elif key_actions["down_clicked"]:
+                    self.viewport.y += 5
+                if key_actions["right_clicked"]:
+                    self.viewport.x += 5
+                elif key_actions["left_clicked"]:
+                    self.viewport.x -=5
 
                 if key_actions["left_mouse_clicked"]:
                     mouse_pos = pygame.mouse.get_pos()
+                    scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
+                    scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
+                    mouse_pos = (scaled_mouse_x, scaled_mouse_y)
                     try:
                         selected_node.x = mouse_pos[0]
                         selected_node.y = mouse_pos[1]
@@ -697,128 +752,270 @@ class MetabolicNetwork:
                                 if node in selected_node.split_of_nodes_partners:
                                     if node.rect.colliderect(selected_node.rect):
                                         selected_node= self.merge_split_nodes_back_together(selected_node, node)
-                    except:
+                    except Exception as e:
                         pass
+                        print(e)
+
+                # for idx, node in enumerate(self.all_network_nodes):
+                #     if node.visible_by_mouse:
+                #         if node.node_type == "reaction":
+                #             pygame.draw.rect(display, (0, 200, 200), node.rect)
+                #             if node.highlighted_by_mouse:
+                #                 outer_rect = node.rect.inflate(10, 10)
+                #                 outer_color = (255, 0, 0)
+                #                 pygame.draw.rect(display, outer_color, outer_rect,2)  # Inn
+                #             if self.show_reaction_names == "Reaction Names":
+                #                 text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
+                #                 text_rect = text_surface.get_rect()
+                #                 text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                #                 display.blit(text_surface, text_rect)
+                #             elif self.show_reaction_names == "Reaction IDs":
+                #                 text_surface = self.font.render(node.instance.id, True, (255, 255, 255))
+                #                 text_rect = text_surface.get_rect()
+                #                 text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                #                 display.blit(text_surface, text_rect)
+                #             elif self.show_reaction_names == "No names":
+                #                 pass
+                #         elif node.node_type == "metabolite":
+                #             if node.highlighted_by_mouse:
+                #                 outer_rect = node.rect.inflate(10, 10)
+                #                 outer_color = (255, 0, 0)
+                #                 pygame.draw.rect(display, outer_color, outer_rect,2)  # Inn
+                #             for idx, compartment in enumerate(self.compartments):
+                #                 if node.instance.compartment == compartment.id:
+                #                     pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), node.rect)
+                #             if node.instance.fixed_node_input or node.instance.fixed_node_output:
+                #                 if self.show_fixed_metabolite_names == "Fixed Metabolite Names":
+                #                     text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
+                #                     text_rect = text_surface.get_rect()
+                #                     text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                #                     display.blit(text_surface, text_rect)
+                #                 elif self.show_fixed_metabolite_names == "Fixed Metabolite IDs":
+                #                     text_surface = self.font.render(node.instance.id, True, (255, 255, 255))
+                #                     text_rect = text_surface.get_rect()
+                #                     text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                #                     display.blit(text_surface, text_rect)
+                #                 elif self.show_fixed_metabolite_names == "No Fixed Names":
+                #                     pass
+                #             else:
+                #                 if self.show_metabolite_names == "Metabolite Names":
+                #                     text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
+                #                     text_rect = text_surface.get_rect()
+                #                     text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                #                     display.blit(text_surface, text_rect)
+                #                 elif self.show_metabolite_names == "Metabolite IDs":
+                #                     text_surface = self.font.render(node.instance.id, True, (255, 255, 255))
+                #                     text_rect = text_surface.get_rect()
+                #                     text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                #                     display.blit(text_surface, text_rect)
+                #                 elif self.show_metabolite_names == "No Names":
+                #                     pass
+                #         elif node.node_type == "compartment":
+                #             for idx, compartment in enumerate(self.compartments):
+                #                 if node.instance == compartment and self.show_compartments:
+                #                     rect = node.rect
+                #                     # Drawing lines for the cross inside the rectangle
+                #                     pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), node.rect)
+                #                     pygame.draw.line(display, (255, 255, 255), (rect.x, rect.y), (rect.x + rect.width, rect.y + rect.height), 3)
+                #                     pygame.draw.line(display, (255, 255, 255), (rect.x + rect.width, rect.y), (rect.x, rect.y + rect.height), 3)
                 for idx, node in enumerate(self.all_network_nodes):
                     if node.visible_by_mouse:
                         if node.node_type == "reaction":
-                            pygame.draw.rect(display, (0, 200, 200), node.rect)
+                            scaled_rect = pygame.Rect(node.rect.x * self.zoom_factor - self.viewport.x,
+                                                      node.rect.y * self.zoom_factor - self.viewport.y,
+                                                      node.rect.width * self.zoom_factor,
+                                                      node.rect.height * self.zoom_factor)
+                            pygame.draw.rect(display, (0, 200, 200), scaled_rect)
+                            # Other operations based on zoom...
+
                             if node.highlighted_by_mouse:
                                 outer_rect = node.rect.inflate(10, 10)
+                                scaled_outer_rect = pygame.Rect(outer_rect.x * self.zoom_factor - self.viewport.x,
+                                                                outer_rect.y * self.zoom_factor - self.viewport.y,
+                                                                outer_rect.width * self.zoom_factor,
+                                                                outer_rect.height * self.zoom_factor)
                                 outer_color = (255, 0, 0)
-                                pygame.draw.rect(display, outer_color, outer_rect,2)  # Inn
+                                pygame.draw.rect(display, outer_color, scaled_outer_rect, 2)  # Inn
+
+                            # Apply text rendering based on conditions and adjust positions with viewport
                             if self.show_reaction_names == "Reaction Names":
                                 text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
                                 text_rect = text_surface.get_rect()
-                                text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                                text_rect.center = (node.rect.center[0]  * self.zoom_factor- self.viewport.x,
+                                                    (node.rect.center[1] * self.zoom_factor - self.rect_size*self.zoom_factor - self.viewport.y))
                                 display.blit(text_surface, text_rect)
                             elif self.show_reaction_names == "Reaction IDs":
                                 text_surface = self.font.render(node.instance.id, True, (255, 255, 255))
                                 text_rect = text_surface.get_rect()
-                                text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                                text_rect.center = (node.rect.center[0]  * self.zoom_factor- self.viewport.x,
+                                                    (node.rect.center[1] * self.zoom_factor - self.rect_size*self.zoom_factor - self.viewport.y))
                                 display.blit(text_surface, text_rect)
                             elif self.show_reaction_names == "No names":
                                 pass
+
                         elif node.node_type == "metabolite":
+                            # Similar adjustments for metabolites based on conditions and viewport
                             if node.highlighted_by_mouse:
                                 outer_rect = node.rect.inflate(10, 10)
+                                scaled_outer_rect = pygame.Rect(outer_rect.x * self.zoom_factor - self.viewport.x,
+                                                                outer_rect.y * self.zoom_factor - self.viewport.y,
+                                                                outer_rect.width * self.zoom_factor,
+                                                                outer_rect.height * self.zoom_factor)
                                 outer_color = (255, 0, 0)
-                                pygame.draw.rect(display, outer_color, outer_rect,2)  # Inn
+                                pygame.draw.rect(display, outer_color, scaled_outer_rect, 2)  # Inn
+
                             for idx, compartment in enumerate(self.compartments):
                                 if node.instance.compartment == compartment.id:
-                                    pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), node.rect)
+                                    scaled_compartment_rect = pygame.Rect(node.rect.x * self.zoom_factor - self.viewport.x,
+                                                                          node.rect.y * self.zoom_factor - self.viewport.y,
+                                                                          node.rect.width * self.zoom_factor,
+                                                                          node.rect.height * self.zoom_factor)
+                                    pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), scaled_compartment_rect)
+
+                            # Apply text rendering based on conditions and adjust positions with viewport
                             if node.instance.fixed_node_input or node.instance.fixed_node_output:
                                 if self.show_fixed_metabolite_names == "Fixed Metabolite Names":
                                     text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
                                     text_rect = text_surface.get_rect()
-                                    text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                                    text_rect.center = (node.rect.center[0]  * self.zoom_factor- self.viewport.x,
+                                                    (node.rect.center[1] * self.zoom_factor - self.rect_size*self.zoom_factor - self.viewport.y))
                                     display.blit(text_surface, text_rect)
                                 elif self.show_fixed_metabolite_names == "Fixed Metabolite IDs":
                                     text_surface = self.font.render(node.instance.id, True, (255, 255, 255))
                                     text_rect = text_surface.get_rect()
-                                    text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                                    text_rect.center = (node.rect.center[0]  * self.zoom_factor- self.viewport.x,
+                                                    (node.rect.center[1] * self.zoom_factor - self.rect_size*self.zoom_factor - self.viewport.y))
                                     display.blit(text_surface, text_rect)
                                 elif self.show_fixed_metabolite_names == "No Fixed Names":
                                     pass
                             else:
+                                # Apply text rendering based on conditions and adjust positions with viewport
                                 if self.show_metabolite_names == "Metabolite Names":
                                     text_surface = self.font.render(node.instance.name, True, (255, 255, 255))
                                     text_rect = text_surface.get_rect()
-                                    text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                                    text_rect.center = (node.rect.center[0]  * self.zoom_factor- self.viewport.x,
+                                                    (node.rect.center[1] * self.zoom_factor - self.rect_size*self.zoom_factor - self.viewport.y))
                                     display.blit(text_surface, text_rect)
                                 elif self.show_metabolite_names == "Metabolite IDs":
                                     text_surface = self.font.render(node.instance.id, True, (255, 255, 255))
                                     text_rect = text_surface.get_rect()
-                                    text_rect.center = (node.rect.center[0] , node.rect.center[1] - self.rect_size)
+                                    text_rect.center = (node.rect.center[0]  * self.zoom_factor- self.viewport.x,
+                                                        (node.rect.center[1] * self.zoom_factor - self.rect_size*self.zoom_factor - self.viewport.y))
                                     display.blit(text_surface, text_rect)
                                 elif self.show_metabolite_names == "No Names":
                                     pass
-                        elif node.node_type == "compartment":
-                            for idx, compartment in enumerate(self.compartments):
-                                if node.instance == compartment and self.show_compartments:
-                                    rect = node.rect
-                                    # Drawing lines for the cross inside the rectangle
-                                    pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), node.rect)
-                                    pygame.draw.line(display, (255, 255, 255), (rect.x, rect.y), (rect.x + rect.width, rect.y + rect.height), 3)
-                                    pygame.draw.line(display, (255, 255, 255), (rect.x + rect.width, rect.y), (rect.x, rect.y + rect.height), 3)
-
                 # compartment legends
                 for idx, compartment in enumerate(self.compartments):
-                    rect = pygame.Rect(width - 50, 50 + idx * 50, 15, 15)
-                    pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), rect)
+                    scaled_rect = pygame.Rect((width - 50) * self.zoom_factor - self.viewport.x,
+                                              (50 + idx * 50) * self.zoom_factor - self.viewport.y,
+                                              15 * self.zoom_factor,
+                                              15 * self.zoom_factor)
+                    pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), scaled_rect)
+
                     text_surface = self.font2.render(str(compartment.name), True, (50 + (idx * 50) % 255, 100, 0))
-                    text_rect = text_surface.get_rect(center=(width - 100, 58 + (idx * 50)))
+                    text_rect = text_surface.get_rect(center=((width - 100) * self.zoom_factor - self.viewport.x,
+                                                              (58 + (idx * 50)) * self.zoom_factor - self.viewport.y))
                     display.blit(text_surface, text_rect)
 
+                # Code for drawing lines, fluxes, and expressions with adjustments for the viewport
                 if self.show_lines:
                     for idx, node in enumerate(self.all_network_nodes):
                         if node.visible_by_mouse:
                             for idx2 in range(1, len(self.edge_logic_dict["draw_lines_connections"][idx])):
-                                if self.edge_logic_dict["draw_lines_connections"][idx2][idx] == 1 :
+                                if self.edge_logic_dict["draw_lines_connections"][idx2][idx] == 1:
                                     if self.all_network_nodes[idx2].visible_by_mouse:
                                         x_start = self.all_network_nodes[idx2].x
                                         y_start = self.all_network_nodes[idx2].y
                                         x_end = self.all_network_nodes[idx].x
                                         y_end = self.all_network_nodes[idx].y
-                                        color_ = (255,255,255)
+                                        color_ = (255, 255, 255)
 
+                                        scaled_x_start = x_start * self.zoom_factor - self.viewport.x
+                                        scaled_y_start = y_start * self.zoom_factor - self.viewport.y
+                                        scaled_x_end = x_end * self.zoom_factor - self.viewport.x
+                                        scaled_y_end = y_end * self.zoom_factor - self.viewport.y
 
-                                        # pygame.draw.line(display, (255, 255, 255), (x_start, y_start), (x_end, y_end))
-                                        self.draw_arrow_head((x_start, y_start), (x_end,y_end), display, color_)
-                if self.show_flux_expression == "Fluxes":
+                                        pygame.draw.line(display, (255, 255, 255), (scaled_x_start, scaled_y_start),
+                                                         (scaled_x_end, scaled_y_end))
+                                        # Draw arrow head...
+
+                if self.show_flux_expression == "Fluxes" or self.show_flux_expression == "Both flux and expression":
                     for node in self.all_network_nodes:
                         if node.node_type == "reaction":
                             try:
                                 text_surface = self.font.render(str(self.fluxes_dict[node.instance.id]), True, (255, 0, 0))
                                 text_rect = text_surface.get_rect()
-                                text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] +self.rect_size)
-                                display.blit(text_surface, text_rect)
-                            except:
-                                pass
-                elif self.show_flux_expression == "Expression":
-                    for node in self.all_network_nodes:
-                        if node.node_type == "reaction":
-                            try:
-                                text_surface = self.font.render(str(self.expression_dict[node.instance.id]), True, (0, 255, 0))
-                                text_rect = text_surface.get_rect()
-                                text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] -self.rect_size)
-                                display.blit(text_surface, text_rect)
-                            except:
-                                pass
-                elif self.show_flux_expression == "Both flux and expression":
-                    for node in self.all_network_nodes:
-                        if node.node_type == "reaction":
-                            try:
-                                text_surface = self.font.render(str(self.fluxes_dict[node.instance.id]), True, (255, 0,0))
-                                text_rect = text_surface.get_rect()
-                                text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] +self.rect_size)
-                                display.blit(text_surface, text_rect)
-                                text_surface = self.font.render(str(self.expression_dict[node.instance.id]), True, (0, 255, 0))
-                                text_rect = text_surface.get_rect()
-                                text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] -self.rect_size)
+                                text_rect.topright = ((node.rect.topright[0] + self.rect_size) * self.zoom_factor - self.viewport.x,
+                                                      (node.rect.topright[1] + self.rect_size) * self.zoom_factor - self.viewport.y)
                                 display.blit(text_surface, text_rect)
                             except Exception as e:
                                 pass
+                if self.show_flux_expression == "Expression" or self.show_flux_expression == "Both flux and expression":
+                    for node in self.all_network_nodes:
+                        if node.node_type == "reaction":
+                            try:
+                                text_surface = self.font.render(str(self.expression_dict[node.instance.id]), True, (0, 255, 0))
+                                text_rect = text_surface.get_rect()
+                                text_rect.topright = ((node.rect.topright[0] + self.rect_size) * self.zoom_factor - self.viewport.x,
+                                                      (node.rect.topright[1] - self.rect_size) * self.zoom_factor - self.viewport.y)
+                                display.blit(text_surface, text_rect)
+                            except Exception as e:
+                                pass
+                # for idx, compartment in enumerate(self.compartments):
+                #     rect = pygame.Rect(width - 50, 50 + idx * 50, 15, 15)
+                #     pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), rect)
+                #     text_surface = self.font2.render(str(compartment.name), True, (50 + (idx * 50) % 255, 100, 0))
+                #     text_rect = text_surface.get_rect(center=(width - 100, 58 + (idx * 50)))
+                #     display.blit(text_surface, text_rect)
+                #
+                # if self.show_lines:
+                #     for idx, node in enumerate(self.all_network_nodes):
+                #         if node.visible_by_mouse:
+                #             for idx2 in range(1, len(self.edge_logic_dict["draw_lines_connections"][idx])):
+                #                 if self.edge_logic_dict["draw_lines_connections"][idx2][idx] == 1 :
+                #                     if self.all_network_nodes[idx2].visible_by_mouse:
+                #                         x_start = self.all_network_nodes[idx2].x
+                #                         y_start = self.all_network_nodes[idx2].y
+                #                         x_end = self.all_network_nodes[idx].x
+                #                         y_end = self.all_network_nodes[idx].y
+                #                         color_ = (255,255,255)
+                #
+                #                         # pygame.draw.line(display, (255, 255, 255), (x_start, y_start), (x_end, y_end))
+                #                         self.draw_arrow_head((x_start, y_start), (x_end,y_end), display, color_)
+                # if self.show_flux_expression == "Fluxes":
+                #     for node in self.all_network_nodes:
+                #         if node.node_type == "reaction":
+                #             try:
+                #                 text_surface = self.font.render(str(self.fluxes_dict[node.instance.id]), True, (255, 0, 0))
+                #                 text_rect = text_surface.get_rect()
+                #                 text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] +self.rect_size)
+                #                 display.blit(text_surface, text_rect)
+                #             except:
+                #                 pass
+                # elif self.show_flux_expression == "Expression":
+                #     for node in self.all_network_nodes:
+                #         if node.node_type == "reaction":
+                #             try:
+                #                 text_surface = self.font.render(str(self.expression_dict[node.instance.id]), True, (0, 255, 0))
+                #                 text_rect = text_surface.get_rect()
+                #                 text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] -self.rect_size)
+                #                 display.blit(text_surface, text_rect)
+                #             except:
+                #                 pass
+                # elif self.show_flux_expression == "Both flux and expression":
+                #     for node in self.all_network_nodes:
+                #         if node.node_type == "reaction":
+                #             try:
+                #                 text_surface = self.font.render(str(self.fluxes_dict[node.instance.id]), True, (255, 0,0))
+                #                 text_rect = text_surface.get_rect()
+                #                 text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] +self.rect_size)
+                #                 display.blit(text_surface, text_rect)
+                #                 text_surface = self.font.render(str(self.expression_dict[node.instance.id]), True, (0, 255, 0))
+                #                 text_rect = text_surface.get_rect()
+                #                 text_rect.topright = (node.rect.topright[0] +  self.rect_size, node.rect.topright[1] -self.rect_size)
+                #                 display.blit(text_surface, text_rect)
+                #             except Exception as e:
+                #                 pass
                 pygame.display.flip()
 
             self.calculate_forces_through_network()
@@ -985,6 +1182,7 @@ class MetabolicNetwork:
             self.all_network_nodes[-1].instance = new_current_node_instance
             self.all_network_nodes[-1].input_instances = to_split_off_input_instances
             self.all_network_nodes[-1].output_instances = to_split_off_output_instances
+            self.all_network_nodes[-1].fixed_by_mouse = node.fixed_by_mouse
 
             for other_instance, other_node in zip(to_split_off_output_instances, to_split_off_output_nodes):
                 try:
@@ -1000,11 +1198,52 @@ class MetabolicNetwork:
                     pass
 
     def merge_split_nodes_back_together(self, node1, node2):
+        match1 = re.search(r'_(\d+)', node1.instance.id)
+        result1 = int(match1.group(1)) if match1 else 0
+        match2 = re.search(r'_(\d+)', node2.instance.id)
+        result2 = int(match2.group(1)) if match2 else 0
+        highest_node, lowest_node = (node1, node2) if result1 > result2 else (node2, node1)
+        to_change_input_instances =highest_node.input_instances
+        to_change_output_instances =highest_node.output_instances
+        lowest_node.input_instances.extend(to_change_input_instances)
+        lowest_node.output_instances.extend(to_change_output_instances)
+
+        for instance in to_change_output_instances:
+            for node in self.all_network_nodes:
+                if node.instance == instance:
+                    node.input_instances.remove(highest_node.instance)
+                    node.input_instances.append(lowest_node.instance)
+                    break
+        for instance in to_change_input_instances:
+            for node in self.all_network_nodes:
+                if node.instance ==instance:
+                    node.output_instances.remove(highest_node.instance)
+                    node.output_instances.append(lowest_node.instance)
+
+        lowest_node.split_of_nodes_partners.remove(highest_node)
+        if len(lowest_node.split_of_nodes_partners)==0:
+            lowest_node.instance.id = lowest_node.instance.name
+            match = re.match(r'^(.+[a-zA-Z]?)(?:_\d+)?$', lowest_node.instance.id)
+            if match:
+               lowest_node.instance.id = match.group(1)
+            lowest_node.instance.name = lowest_node.instance.name
+            match = re.match(r'^(.+[a-zA-Z]?)(?:_\d+)?$', lowest_node.instance.name)
+            if match:
+                lowest_node.instance.name = match.group(1)
+        else:
+            for partners in lowest_node.split_of_nodes_partners:
+                partners.split_of_nodes_partners.remove(highest_node)
+
+        self.all_network_nodes.remove(highest_node)
+        for idx,node in enumerate(self.all_network_nodes):
+            node.id_number = idx
         # find lowest number id instance and combine into that one
+
         # combine all input/output instances
         # update the partners list
         # adjust partner id number if 0 in partners list
-        remaining_node = node1 # PLACHOLDER
+        remaining_node = lowest_node
+        self.update_edge_network()
         return remaining_node
     def extract_non_pseudo_nodes_and_edges(self):
         # remove
