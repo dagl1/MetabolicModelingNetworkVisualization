@@ -120,10 +120,11 @@ class NetworkNodesForPhysicsSimulation:
         self.fixed_by_mouse = False
         self.visible_by_mouse = True
         # Unfortunately necessary to make sure all lines are drawn (something goes wrong with indicing
-        if isinstance(self.instance, MetaboliteNodes) and self.instance.id == "fake":
+        if isinstance(self.instance, MetaboliteNodes) and self.instance.id == "000fake":
             self.visible_by_mouse = False
         self.highlighted_by_mouse = False
         self.split_of_nodes_partners =  []
+        self.selected_by_drag_selection = False
     def find_input_and_output_instances(self):
         if isinstance(self.instance, ReactionEdges):
             for metabolite, stoichiometry in self.instance.metabolites.items():
@@ -185,6 +186,16 @@ class MetabolicNetwork:
         self.expression_dict = {}
         self.full_json_dict = {}
         self.zoom_factor = 1
+        self.show_color_lines = False
+        self.drawing_selection_rect_on_screen = False
+        self.begin_selection_rect_pos = (0,0)
+        self.end_selection_rect_pos = (0,0)
+        self.search_mode_enabled = False
+        self.search_input_text = ""
+        self.search_suggestion_list = []
+        self.full_search_list =[]
+        self.current_search_index = 0
+        self.selected_search_item = None
 
 
     def save_as_json(self):
@@ -376,9 +387,9 @@ class MetabolicNetwork:
                     self.compartments[idx].metabolites.append(metabolite)
 
     def create_network_nodes_for_simulation(self):
-        # Add a fake metabolite, unfortunately necessary for making sure all lines are drawn correctly (weirdly enough)
-        if self.included_metabolites[0].id == "fake":
-            self.included_metabolites.insert(0, MetaboliteNodes("fake", "fake", self.compartments[0]))
+        # Add a fake metabolite, unfortunately necessary for making sure all lines are drawn correttly (weirdly enough)
+        if self.included_metabolites[0].id != "000fake":
+            self.included_metabolites.insert(0, MetaboliteNodes("000fake", "000fake", self.compartments[0].id))
 
         self.all_network_nodes = []
         # Create all types of nodes
@@ -605,12 +616,16 @@ class MetabolicNetwork:
             os.environ['SDL_VIDEO_WINDOW_POS'] = '1020,30'
             pygame.init()
             display = pygame.display.set_mode([1500, 1200])
+            text_input_rect = pygame.Rect(50, 50, 300, 40)
             self.viewport = pygame.Rect(0, 0, 1500, 1200)
             self.font = pygame.font.SysFont(None, self.font_size)
             self.font2 = pygame.font.SysFont(None, 28)
+            self.font3 = pygame.font.Font(None,32)
             key_actions = {"left_mouse_clicked": False, "right_mouse_clicked": False, "middle_mouse_clicked": False,
-                           "shift_clicked": False, "v_clicked": False, "s_clicked": False, "up_clicked": False, "down_clicked": False,
-                           "right_clicked": False, "left_clicked": False}
+                           "shift_clicked": False, "v_clicked": False, "split_clicked": False, "up_clicked": False, "down_clicked": False,
+                           "right_clicked": False, "left_clicked": False, "f_clicked": False, "g_clicked": False, "tab_clicked": False,
+                           "enter_clicked": False, "escape clicked": False}
+            selected_node = None
         while running:
             if pygame_on:
                 display.fill((0, 0, 0))
@@ -618,48 +633,106 @@ class MetabolicNetwork:
                     if event.type == pygame.QUIT:
                         running = False
                     elif event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_F1:
+                        if self.search_mode_enabled:
+                            if event.key == pygame.K_ESCAPE:
+                                self.search_mode_enabled = False
+                            elif event.key == pygame.K_BACKSPACE:
+                                self.search_input_text = self.search_input_text[:-1]  # Remove the last character
+                            elif event.key == pygame.K_RETURN:
+                                if len(self.search_suggestion_list) <2:
+                                    self.current_search_index = 0
+                                self.selected_search_item = self.search_suggestion_list[self.current_search_index]["node"]
+                                self.selected_search_item.selected_by_drag_selection = True
+                                self.search_input_text = ''  # Clear the input text after processing
+                            elif event.key == pygame.K_TAB:
+                                #finish search
+                                if len(self.search_suggestion_list)>0:
+                                    self.search_input_text = self.search_suggestion_list[self.current_search_index]["text"]
+                            elif event.key == pygame.K_UP:
+                                if len(self.search_suggestion_list)==0:
+                                    pass
+                                elif len(self.search_suggestion_list) ==1:
+                                    self.current_search_index =0
+                                else:
+                                    self.current_search_index -=1
+                                    self.current_search_index = self.current_search_index % (len(self.search_suggestion_list))
+                            elif event.key == pygame.K_DOWN:
+
+                                if len(self.search_suggestion_list)==0:
+                                    pass
+                                elif len(self.search_suggestion_list) ==1:
+                                    self.current_search_index =0
+                                else:
+                                    self.current_search_index +=1
+                                    self.current_search_index = self.current_search_index % (len(self.search_suggestion_list))
+
+                            else:
+                                self.search_input_text += event.unicode  # Add the typed character to the input text
+                            self.update_search_recommendations()
+
+                        elif event.key == pygame.K_F1:
                             running = False
                         elif event.key == pygame.K_LSHIFT:
                             key_actions["shift_clicked"] = True
-                        elif event.key == pygame.K_m:
-                            self.zoom_factor +=1
-                            if self.zoom_factor >10:
+                        elif event.key == pygame.K_e:
+                            previous_zoom_factor = self.zoom_factor
+                            self.zoom_factor += 1
+                            if self.zoom_factor > 10:
                                 self.zoom_factor = 10
-                        elif event.key ==  pygame.K_l:
+                            current_zoom_factor = self.zoom_factor
+                            if previous_zoom_factor != current_zoom_factor:
+                                zoom_ratio = current_zoom_factor / previous_zoom_factor
+                                self.viewport.x = int((self.viewport.x * zoom_ratio) + (display.get_width()/previous_zoom_factor/2))
+                                self.viewport.y = int((self.viewport.y * zoom_ratio) + (display.get_height()/previous_zoom_factor/2))
+                        elif event.key == pygame.K_q:
+                            previous_zoom_factor = self.zoom_factor
                             self.zoom_factor -= 1
-                            if self.zoom_factor <1:
+                            if self.zoom_factor < 1:
                                 self.zoom_factor = 1
+                            current_zoom_factor = self.zoom_factor
+                            if previous_zoom_factor != current_zoom_factor:
+                                zoom_ratio = current_zoom_factor / previous_zoom_factor
+                                self.viewport.x = int((self.viewport.x * zoom_ratio) - (display.get_width()/previous_zoom_factor/2) )
+                                self.viewport.y = int((self.viewport.y * zoom_ratio) - (display.get_height()/previous_zoom_factor/2))
                         elif event.key == pygame.K_v:
                             key_actions["v_clicked"] = True
-                        elif event.key == pygame.K_s:
-                            key_actions["s_clicked"] = True
-                        elif event.key == pygame.K_UP:
+                        elif event.key == pygame.K_x:
+                            key_actions["split_clicked"] = True
+                        elif event.key == pygame.K_UP or event.key == pygame.K_w:
                             key_actions["up_clicked"] = True
-                        elif event.key == pygame.K_DOWN:
+                        elif event.key == pygame.K_DOWN or event.key == pygame.K_s:
                             key_actions["down_clicked"] = True
-                        elif event.key == pygame.K_LEFT:
+                        elif event.key == pygame.K_LEFT or event.key == pygame.K_a:
                             key_actions["left_clicked"] = True
-                        elif event.key == pygame.K_RIGHT:
+                        elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
                             key_actions["right_clicked"] = True
+                        elif event.key == pygame.K_f:
+                            key_actions["f_clicked"] = True
+                        elif event.key == pygame.K_g:
+                            self.search_input_text = ""
+                            self.search_mode_enabled = True
                     elif event.type == pygame.KEYUP:
-                        if event.key == pygame.K_LSHIFT:
+                        if self.search_mode_enabled:
+                            pass
+                        elif event.key == pygame.K_LSHIFT:
                             key_actions["shift_clicked"] = False
                         elif event.key == pygame.K_v:
                             key_actions["v_clicked"] = False
-                        elif event.key == pygame.K_s:
-                            key_actions["s_clicked"] = False
-                        elif event.key == pygame.K_UP:
+                        elif event.key == pygame.K_x:
+                            key_actions["split_clicked"] = False
+                        elif event.key == pygame.K_UP or event.key == pygame.K_w:
                             key_actions["up_clicked"] = False
-                        elif event.key == pygame.K_DOWN:
+                        elif event.key == pygame.K_DOWN or event.key == pygame.K_s:
                             key_actions["down_clicked"] = False
-                        elif event.key == pygame.K_LEFT:
+                        elif event.key == pygame.K_LEFT or event.key == pygame.K_a:
                             key_actions["left_clicked"] = False
-                        elif event.key == pygame.K_RIGHT:
+                        elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
                             key_actions["right_clicked"] = False
+                        elif event.key == pygame.K_f:
+                            key_actions["f_clicked"] = False
 
                     elif event.type == pygame.MOUSEBUTTONDOWN:
-                        if event.button == 1 and key_actions["s_clicked"]:
+                        if event.button == 1 and key_actions["split_clicked"]:
                             for node in self.all_network_nodes:
                                 mouse_pos = pygame.mouse.get_pos()
                                 scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
@@ -691,7 +764,18 @@ class MetabolicNetwork:
                                     self.queue.put(self.tk_application.create_listboxes)
                                     self.queue.put(self.tk_application.create_listboxes_visibility)
                                     break
-                        elif event.button == 1:
+
+                        elif event.button == 1 and key_actions["f_clicked"]:
+                            key_actions["right_mouse_clicked"] = True
+                            mouse_pos = pygame.mouse.get_pos()
+                            scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
+                            scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
+                            mouse_pos = (scaled_mouse_x, scaled_mouse_y)
+                            for node in self.all_network_nodes:
+                                if node.rect.collidepoint(mouse_pos):
+                                    node.fixed_by_mouse = not node.fixed_by_mouse
+                                    break
+                        elif event.button == 1 and not self.drawing_selection_rect_on_screen:
                             key_actions["left_mouse_clicked"] = True
                             mouse_pos = pygame.mouse.get_pos()
                             scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
@@ -702,6 +786,7 @@ class MetabolicNetwork:
                                     node.fixed_by_mouse = True
                                     selected_node = node
                                     break
+
                         elif event.button == 2:
                             key_actions["middle_mouse_clicked"] = True
                             mouse_pos = pygame.mouse.get_pos()
@@ -716,45 +801,107 @@ class MetabolicNetwork:
                                     break
                         elif event.button == 3:
                             key_actions["right_mouse_clicked"] = True
-                            mouse_pos = pygame.mouse.get_pos()
-                            scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
-                            scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
-                            mouse_pos = (scaled_mouse_x, scaled_mouse_y)
+                            self.drawing_selection_rect_on_screen = False
                             for node in self.all_network_nodes:
-                                if node.rect.collidepoint(mouse_pos):
-                                    node.fixed_by_mouse = not node.fixed_by_mouse
-                                    break
+                                node.selected_by_drag_selection = False
                     elif event.type == pygame.MOUSEBUTTONUP:
-                        if event.button == 1:
+                        if event.button == 1 and not key_actions["shift_clicked"]:
                             key_actions["left_mouse_clicked"] = False
                             selected_node = None
+                            if self.drawing_selection_rect_on_screen:
+                                x_ = min(self.begin_selection_rect_pos[0], self.end_selection_rect_pos[0])
+                                y_ = min(self.begin_selection_rect_pos[1], self.end_selection_rect_pos[1])
+                                width_ = abs(self.end_selection_rect_pos[0] - self.begin_selection_rect_pos[0])
+                                height_ = abs(self.end_selection_rect_pos[1] - self.begin_selection_rect_pos[1])
+                                rect_to_draw = pygame.Rect(x_, y_, width_, height_)
+                                for node in self.all_network_nodes:
+                                    if rect_to_draw.colliderect(node.rect):
+                                        node.selected_by_drag_selection = True
+                            self.drawing_selection_rect_on_screen = False
+                        elif event.button == 1 and key_actions["shift_clicked"]:
+                             key_actions["left_mouse_clicked"] = False
+                             selected_node = None
+                             if self.drawing_selection_rect_on_screen:
+                                 x_ = min(self.begin_selection_rect_pos[0], self.end_selection_rect_pos[0])
+                                 y_ = min(self.begin_selection_rect_pos[1], self.end_selection_rect_pos[1])
+                                 width_ = abs(self.end_selection_rect_pos[0] - self.begin_selection_rect_pos[0])
+                                 height_ = abs(self.end_selection_rect_pos[1] - self.begin_selection_rect_pos[1])
+                                 rect_to_draw = pygame.Rect(x_, y_, width_, height_)
+                                 for node in self.all_network_nodes:
+                                     if rect_to_draw.colliderect(node.rect):
+                                         node.highlighted_by_mouse = not node.highlighted_by_mouse
+                             self.drawing_selection_rect_on_screen = False
+
                         elif event.button == 3:
                             key_actions["right_mouse_clicked"] = False
                 if key_actions["up_clicked"]:
-                    self.viewport.y -=5
+                    self.viewport.y -= 8
                 elif key_actions["down_clicked"]:
-                    self.viewport.y += 5
+                    self.viewport.y += 8
                 if key_actions["right_clicked"]:
-                    self.viewport.x += 5
+                    self.viewport.x += 8
                 elif key_actions["left_clicked"]:
-                    self.viewport.x -=5
-
+                    self.viewport.x -= 8
                 if key_actions["left_mouse_clicked"]:
                     mouse_pos = pygame.mouse.get_pos()
                     scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
                     scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
-                    mouse_pos = (scaled_mouse_x, scaled_mouse_y)
-                    try:
-                        selected_node.x = mouse_pos[0]
-                        selected_node.y = mouse_pos[1]
-                        if len(selected_node.split_of_nodes_partners)>0:
+                    scaled_mouse_pos = (scaled_mouse_x, scaled_mouse_y)
+                    if selected_node is not None:
+                        if not selected_node.selected_by_drag_selection:
+                            selected_node.x = scaled_mouse_pos[0]
+                            selected_node.y = scaled_mouse_pos[1]
+                            if len(selected_node.split_of_nodes_partners)>0:
+                                for node in self.all_network_nodes:
+                                    if node in selected_node.split_of_nodes_partners:
+                                        if node.rect.colliderect(selected_node.rect):
+                                            selected_node= self.merge_split_nodes_back_together(selected_node, node)
+                        else:
+                            previous_x, previous_y = selected_node.x, selected_node.y
+                            selected_node.x = scaled_mouse_pos[0]
+                            selected_node.y = scaled_mouse_pos[1]
+                            distance_x, distance_y = selected_node.x - previous_x, selected_node.y - previous_y
                             for node in self.all_network_nodes:
-                                if node in selected_node.split_of_nodes_partners:
-                                    if node.rect.colliderect(selected_node.rect):
-                                        selected_node= self.merge_split_nodes_back_together(selected_node, node)
-                    except Exception as e:
-                        pass
-                        print(e)
+                                if node.selected_by_drag_selection and node != selected_node:
+                                    if self.show_compartments:
+                                        node.x += distance_x
+                                        node.y += distance_y
+                                        node.fixed_by_mouse = True
+                                    elif node.node_type != "compartment":
+                                        node.x += distance_x
+                                        node.y += distance_y
+                                        node.fixed_by_mouse = True
+
+                    else:
+                        if not self.drawing_selection_rect_on_screen:
+                            mouse_pos = pygame.mouse.get_pos()
+                            scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
+                            scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
+                            self.begin_selection_rect_pos = (scaled_mouse_x, scaled_mouse_y)
+                            self.end_selection_rect_pos= self.begin_selection_rect_pos
+                            self.drawing_selection_rect_on_screen = True
+                            for node in self.all_network_nodes:
+                                node.drawing_selection_rect = False
+                        else:
+                            mouse_pos = pygame.mouse.get_pos()
+                            scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
+                            scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
+                            self.end_selection_rect_pos = (scaled_mouse_x, scaled_mouse_y)
+
+                if self.drawing_selection_rect_on_screen:
+                    x_ = min(self.begin_selection_rect_pos[0], self.end_selection_rect_pos[0])* self.zoom_factor - self.viewport.x
+                    y_ = min(self.begin_selection_rect_pos[1], self.end_selection_rect_pos[1])* self.zoom_factor - self.viewport.y
+                    width_ = abs(self.end_selection_rect_pos[0] - self.begin_selection_rect_pos[0]) * self.zoom_factor
+                    height_ = abs(self.end_selection_rect_pos[1] - self.begin_selection_rect_pos[1]) *self.zoom_factor
+                    rect_to_draw = pygame.Rect(x_, y_, width_, height_)
+                    pygame.draw.rect(display, (255, 0, 0), rect_to_draw, 2)
+
+                ## # Centre Dot
+                # unscaled_middle_x = display.get_width() / 2
+                # unscaled_middle_y = display.get_height() / 2
+                # dot_size = 5  # Define the dot size
+                # dot_color = (255, 165, 0)  # Orange color
+                # pygame.draw.circle(display, dot_color, (int(unscaled_middle_x), int(unscaled_middle_y)), dot_size)
 
                 # for idx, node in enumerate(self.all_network_nodes):
                 #     if node.visible_by_mouse:
@@ -818,6 +965,28 @@ class MetabolicNetwork:
                 #                     pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), node.rect)
                 #                     pygame.draw.line(display, (255, 255, 255), (rect.x, rect.y), (rect.x + rect.width, rect.y + rect.height), 3)
                 #                     pygame.draw.line(display, (255, 255, 255), (rect.x + rect.width, rect.y), (rect.x, rect.y + rect.height), 3)
+
+                #highlighted rects
+                for node in self.all_network_nodes:
+                    if node.visible_by_mouse and node.node_type != "boundary" and node.selected_by_drag_selection:
+                        if self.show_compartments:
+                            outer_rect = node.rect.inflate(15, 15)
+                            scaled_outer_rect = pygame.Rect(outer_rect.x * self.zoom_factor - self.viewport.x,
+                                                            outer_rect.y * self.zoom_factor - self.viewport.y,
+                                                            outer_rect.width * self.zoom_factor,
+                                                            outer_rect.height * self.zoom_factor)
+                            outer_color = (0, 200, 0)
+                            pygame.draw.rect(display, outer_color, scaled_outer_rect, 2)  # Inn
+
+                        elif node.node_type != "compartment":
+                            outer_rect = node.rect.inflate(15, 15)
+                            scaled_outer_rect = pygame.Rect(outer_rect.x * self.zoom_factor - self.viewport.x,
+                                                            outer_rect.y * self.zoom_factor - self.viewport.y,
+                                                            outer_rect.width * self.zoom_factor,
+                                                            outer_rect.height * self.zoom_factor)
+                            outer_color = (0, 200, 0)
+                            pygame.draw.rect(display, outer_color, scaled_outer_rect, 2)  # Inn
+
                 for idx, node in enumerate(self.all_network_nodes):
                     if node.visible_by_mouse:
                         if node.node_type == "reaction":
@@ -904,7 +1073,24 @@ class MetabolicNetwork:
                                     display.blit(text_surface, text_rect)
                                 elif self.show_metabolite_names == "No Names":
                                     pass
-                # compartment legends
+                        elif node.node_type == "compartment" and self.show_compartments:
+                            for idx, compartment in enumerate(self.compartments):
+                                if node.instance == compartment:
+                                    rect = node.rect.copy()  # Make a copy of the node's rectangle
+
+                                    # Adjust the rectangle's position based on the viewport
+                                    rect.x -= self.viewport.x
+                                    rect.y -= self.viewport.y
+
+                                    # Adjust the rectangle's size based on the zoom factor
+                                    rect.width *= self.zoom_factor
+                                    rect.height *= self.zoom_factor
+
+                                    # Drawing lines for the cross inside the rectangle with adjusted coordinates
+                                    pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), rect)
+                                    pygame.draw.line(display, (255, 255, 255), (rect.x, rect.y), (rect.x + rect.width, rect.y + rect.height), 3)
+                                    pygame.draw.line(display, (255, 255, 255), (rect.x + rect.width, rect.y), (rect.x, rect.y + rect.height), 3)
+            # compartment legends
                 for idx, compartment in enumerate(self.compartments):
                     scaled_rect = pygame.Rect((width - 50) * self.zoom_factor - self.viewport.x,
                                               (50 + idx * 50) * self.zoom_factor - self.viewport.y,
@@ -928,16 +1114,28 @@ class MetabolicNetwork:
                                         y_start = self.all_network_nodes[idx2].y
                                         x_end = self.all_network_nodes[idx].x
                                         y_end = self.all_network_nodes[idx].y
-                                        color_ = (255, 255, 255)
 
                                         scaled_x_start = x_start * self.zoom_factor - self.viewport.x
                                         scaled_y_start = y_start * self.zoom_factor - self.viewport.y
                                         scaled_x_end = x_end * self.zoom_factor - self.viewport.x
                                         scaled_y_end = y_end * self.zoom_factor - self.viewport.y
-
-                                        pygame.draw.line(display, (255, 255, 255), (scaled_x_start, scaled_y_start),
-                                                         (scaled_x_end, scaled_y_end))
-                                        # Draw arrow head...
+                                        if self.show_color_lines:
+                                            if self.all_network_nodes[idx].node_type == "metabolite":
+                                                for idx3, compartment in enumerate(self.compartments):
+                                                    if self.all_network_nodes[idx].instance.compartment == compartment.id:
+                                                        color_ = (40 + (idx3 * 60) % 255, 100, 0)
+                                                        print(scaled_x_start, scaled_x_end, scaled_y_start, scaled_y_end, color_)
+                                                        self.draw_arrow_head((scaled_x_start, scaled_y_start), (scaled_x_end, scaled_y_end), display, color_)
+                                                        break
+                                            if self.all_network_nodes[idx2].node_type == "metabolite":
+                                                for idx3, compartment in enumerate(self.compartments):
+                                                    if self.all_network_nodes[idx2].instance.compartment == compartment.id:
+                                                        color_ = (40 + (idx3 * 60) % 255, 100, 0)
+                                                        self.draw_arrow_head((scaled_x_start, scaled_y_start), (scaled_x_end, scaled_y_end), display, color_)
+                                                        break
+                                        else:
+                                            color_= (255,255,255)
+                                            self.draw_arrow_head((scaled_x_start, scaled_y_start), (scaled_x_end, scaled_y_end), display, color_)
 
                 if self.show_flux_expression == "Fluxes" or self.show_flux_expression == "Both flux and expression":
                     for node in self.all_network_nodes:
@@ -961,6 +1159,33 @@ class MetabolicNetwork:
                                 display.blit(text_surface, text_rect)
                             except Exception as e:
                                 pass
+                if self.search_mode_enabled:
+                    rendered_text = self.font3.render(self.search_input_text, True, (0, 0, 0))
+                    text_input_rect.width = max(300, rendered_text.get_width() + 10)  # Adjust width based on rendered text width
+                    text_input_rect.top = display.get_height() -400
+                    text_input_rect.left = display.get_width() - 50-text_input_rect.width
+                    pygame.draw.rect(display, (200, 200, 200), text_input_rect)  # Draw the input box
+                    display.blit(rendered_text, (text_input_rect.x + 5, text_input_rect.y + 10))
+
+                    for idx1, result in enumerate(self.search_suggestion_list):
+                        rendered_recommendation = self.font3.render(result["text"], True, (255, 255, 255))
+                        recommendation_rect = rendered_recommendation.get_rect()
+                        recommendation_rect.topleft = (text_input_rect.left, text_input_rect.bottom + (idx1 * recommendation_rect.height+20))
+                        if idx1 == self.current_search_index:
+                            pygame.draw.rect(display, (150,150,150), recommendation_rect)
+                        display.blit(rendered_recommendation, recommendation_rect.topleft)
+                        start_pos = result["start_pos"]
+                        end_pos = result["end_pos"]
+                        if start_pos != -1 and end_pos != -1:
+                            nudging_value = 13
+                            highlight_rect = pygame.Rect(recommendation_rect.left + (start_pos*nudging_value),
+                                                         recommendation_rect.top,
+                                                         (end_pos*nudging_value) - (start_pos*nudging_value),
+                                                         recommendation_rect.height)
+                            pygame.draw.rect(display, (255,255,0), highlight_rect, 2)
+
+
+
                 # for idx, compartment in enumerate(self.compartments):
                 #     rect = pygame.Rect(width - 50, 50 + idx * 50, 15, 15)
                 #     pygame.draw.rect(display, (40 + (idx * 60) % 255, 100, 0), rect)
@@ -1032,20 +1257,41 @@ class MetabolicNetwork:
         angle = math.atan2(dy, dx)
         arrow_len = max(3, self.rect_size-6)
         arrow_angle = math.pi / 6
-
         arrow1 = (end[0] - arrow_len * math.cos(angle - arrow_angle),
                   end[1] - arrow_len * math.sin(angle - arrow_angle))
         arrow2 = (end[0] - arrow_len * math.cos(angle + arrow_angle),
                   end[1] - arrow_len * math.sin(angle + arrow_angle))
 
-        pygame.draw.line(display, (255, 255, 255), (start[0], start[1]), (end[0], end[1]))
-        pygame.draw.polygon(display, (255,255,255), (end, arrow1, arrow2))
+        pygame.draw.line(display, color_, (start[0], start[1]), (end[0], end[1]))
+        pygame.draw.polygon(display,color_ , (end, arrow1, arrow2))
 
     def pygame_draw_network_code(self, display):
         pass
 
     def pygame_event_handling_code(self):
         pass
+
+    def update_search_recommendations(self):
+        self.search_suggestion_list = []
+        self.full_search_list =[]
+        for node in self.all_network_nodes:
+            if node.node_type == "compartment" and self.show_compartments:
+                names_string = node.instance.name + "  " + node.instance.id
+                self.full_search_list.append((names_string, node))
+            elif node.node_type != "boundary" and  node.visible_by_mouse:
+                names_string = node.instance.name + "  " + node.instance.id
+                self.full_search_list.append((names_string, node))
+        for recommendation in self.full_search_list:
+            start_pos = recommendation[0].lower().find(self.search_input_text.lower())
+            if start_pos != -1:
+                end_pos = start_pos + len(self.search_input_text)
+                self.search_suggestion_list.append({
+                    "text": recommendation[0],
+                    "start_pos": start_pos,
+                    "end_pos": end_pos,
+                    "node": recommendation[1]
+                })
+
 
     def calculate_distance_matrix(self):
         coordinates = np.array([(obj.x, obj.y) for obj in self.all_network_nodes])
@@ -1235,8 +1481,8 @@ class MetabolicNetwork:
                 partners.split_of_nodes_partners.remove(highest_node)
 
         self.all_network_nodes.remove(highest_node)
-        for idx,node in enumerate(self.all_network_nodes):
-            node.id_number = idx
+        # for idx,node in enumerate(self.all_network_nodes):
+        #     node.id_number = idx
         # find lowest number id instance and combine into that one
 
         # combine all input/output instances
@@ -1349,6 +1595,7 @@ class Application:
         self.create_restart_latest_simulation()
         self.create_save_latest_simulation()
         self.create_load_previously_made_model()
+        self.create_color_uncolor_lines_button()
 
         width_ = self.root.winfo_width()
         height_ = self.root.winfo_height()
@@ -1652,6 +1899,12 @@ class Application:
     def on_show_unshow_lines_button_click(self):
         self.met_network.show_lines = not self.met_network.show_lines
 
+    def create_color_uncolor_lines_button(self):
+        button = tk.Button(self.root, text="Color/uncolor lines toggle", command=self.on_color_uncolor_lines_button_click)
+        button.grid(row=6, column=0, padx=5, pady=5, sticky="ew")
+
+    def on_color_uncolor_lines_button_click(self):
+        self.met_network.show_color_lines = not self.met_network.show_color_lines
     def create_restart_latest_simulation(self):
         button = tk.Button(self.root, text="Restart the latest simulation", command=self.on_restart_latest_simulation_click)
         button.grid(row=6, column=2, padx=5, pady=5, sticky="ew")
@@ -1768,9 +2021,9 @@ class Application:
         self.right_list_visibility.grid(row=1, column=3, padx=10, pady=5)
 
         self.names_left_visibility = [node.instance.name if isinstance(node.instance, MetaboliteNodes) else node.instance.id for node in
-                                      self.met_network.all_network_nodes if not isinstance(node.instance, BoundaryNode) and node.visible_by_mouse and node.instance.id !="fake"]
+                                      self.met_network.all_network_nodes if not isinstance(node.instance, BoundaryNode) and node.visible_by_mouse and node.instance.id !="000fake"]
         self.names_right_visibility =[node.instance.name if isinstance(node.instance, MetaboliteNodes) else node.instance.id for node in
-                                      self.met_network.all_network_nodes if not isinstance(node.instance, BoundaryNode) and not node.visible_by_mouse and node.instance.id != "fake"]
+                                      self.met_network.all_network_nodes if not isinstance(node.instance, BoundaryNode) and not node.visible_by_mouse and node.instance.id != "000fake"]
 
         for item in self.names_left_visibility:
             self.left_list_visibility.insert(tk.END, item)
