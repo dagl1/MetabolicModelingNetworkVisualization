@@ -99,3 +99,8 @@ One can manually update the lists by double clicking
 
 ![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/08602957-3ad2-4356-8e13-5581cda20f4b)
 
+### Merging/Splitting nodes
+Sometimes some metabolites or reactions connect two different clusters of nodes and you might want to split these so that this one node does not pull both clusters to each other (and lead to a line stretching the entire screen). In this case you can manually seperate (split) the node by first marking some of its connections as "special" by Shift + Left-mouse button clicking (or holding Shift while drag selecting), then splitting the node with x + Left-mouse button. Split nodes will not be connected to each other, but can be merged by dragging one over one of its partners. Nodes can be split as many times as necessary and will remember all their partner nodes.
+![ezgif com-optimize ESCHER DEMO Merging Splitting ](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/74c74dfd-6ec9-498b-b8cd-dfaf81d56bcb)
+
+
