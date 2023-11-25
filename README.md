@@ -24,6 +24,19 @@ This application was created and tested using Python 3.11 on Windows 10 Pro, but
 Required packages:
 json, pygame, numpy, pandas, tkinter, threading, queue, copy, re, and openpyxl (does not come standard with pandas but is required for handling the excel files).
 
+Alternatively you can get the exact versions used in this project by using the requirements.txt with the following pip install command in the terminal:
+```
+pip install -r requirements.txt
+```
+Warning! It is better to create a virtual environment for your python deployment as to not interfere with any other projects you have going on:
+```
+cd C:/location/where/you/want/to/go
+python -m venv myenv 
+source .\myenv\Scripts\activate
+pip install -r requirements.txt
+```
+For both of these approaches, you will need to have the requirements.txt file in the folder where you are running the terminal from!
+
 ## Running
 To run the application after installing all required packages, run main.py through the console using:
 ``` cmd
