@@ -9,6 +9,7 @@ This tool can load ESHER (https://escher.github.io/#/) JSON maps and ESHER-ready
 At the department where I contributed to a project, we have several methods of creating submodels of larger metabolic networks. These submodels need to be explored to validate and verify their usefulness, normally done in ESCHER. This method is tedious and requires substantial time investment, therefore I thought it would be an interesting project to create an initial visualization tool in which users can (approximately) create the required network with only a few clicks of the mouse. Once acceptable, this can then be further loaded into ESCHER (as it is a lot prettier).
 
 ![ezgif com-optimize](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/dfa014f6-63ff-481b-8fe8-b0bd35c150de)
+
 Example of using ESCHER to manually add each reaction.
 
 ## Why not use some other tools? 
@@ -113,12 +114,11 @@ You might want to find/highlight a node without finding it in the list of visibl
 You might feel like you cannot see exactly what is going on somewhere, in those cases zooming in (e) or out (q), and moving (w, a, s, d keys or arrow keys) the canvas might help. Zooming in is only visual, so the physics calculations will remain exactly the same.
 
 ### Other controls
-![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/5bc2e0c0-6cf0-423b-b2d8-36c0a71734cd)
 There are several buttons that can be used to change some aspects of the application.
 The show/unshow lines button will change the visibility of the lines connecting the nodes, while the show/unshow (default at unshow) compartments will show the special "compartment" nodes, to which each metabolite of that compartment is connected to. Color/uncolor (default uncolor) will change the color of the lines from white, to the color of the compartment the line is connected to. 
 Freeze all nodes and unfreeze all nodes will fix or unfix all nodes, if you have made a nice looking arrangement, be careful wiht the unfree button! Then there are the fontsize and rectangle size sliders, which change the fontsize of the text and the rectangle size respectively. Beneath those there are options for showing reaction and metabolite names, fixed metabolites are input/output metabolites of a specific task using the CellFie (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8577426/) approach.
 Fluxes and expression data can only be shown by uploading the designated excel file (see above).
-
+![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/5bc2e0c0-6cf0-423b-b2d8-36c0a71734cd)
 ### Saving the simulation
 By clicking the "save latest simulation as .json" button, you can save your map, both for reloading into the application, but also applicable for importing it as a map for ESCHER where it can be further edited.
 
