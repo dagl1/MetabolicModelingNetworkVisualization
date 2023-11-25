@@ -32,7 +32,9 @@ Warning! It is better to create a virtual environment for your python deployment
 ```
 cd C:/location/where/you/want/to/go
 python -m venv myenv 
-source .\myenv\Scripts\activate
+.\myenv\Scripts\activate # for Windows
+# or
+source myenv/bin/activate # for Unix/Mac
 pip install -r requirements.txt
 ```
 For both of these approaches, you will need to have the requirements.txt file in the folder where you are running the terminal from!
