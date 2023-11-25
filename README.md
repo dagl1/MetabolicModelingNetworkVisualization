@@ -55,10 +55,10 @@ The settings of this application update the simulation real time, it is therefor
 
 ### Keyboard and mouse controls:
 ```
-WASD or arrow keys to move around the canvas.
+WASD or arrow keys to move around the canvas
 E to zoom in
 Q to zoom out
-Left-mouse button (selected node + hold) to drag node. Can also be used to drag multiple nodes when they are selected by selection rectangle.
+Left-mouse button (selected node + hold) to drag node. Can also be used to drag multiple nodes when they are selected by selection rectangle
 Left-mouse button (no node selected + hold) to create selection rectangle
 Shift + left-mouse button (no node selected + hold, pressing shift at release) to create selection rectangle that marks/unmarks nodes as "special"
 Right-mouse button to unselect nodes selected through rectangle
@@ -76,9 +76,13 @@ G to enter search mode
 ### Attraction and Repulsion sliders:
 ```
 Normal repulsion indicates the amount of repulsion each node receives from each other node in the simulation.
-Intercompartment repulsion indicates the amount of repulsion the special "compartment" nodes feel from each other; does not directly affect any metabolite or reaction nodes.
-Boundary Repulsion indicates the strength the boundary nodes (invisible set of nodes surrounding the canvas) excert on the rest of the nodes, useful for centering the nodes slightly (might make compartment nodes "clip out", in which case you should fix them in place or lower the Boundary repulsion and dragging the compartment nodes back into the canvas).
-Input_metabolite-Input_metabolite Repulsion is used to spread the input and output metabolites. These can only move on their own on the X-axis, you can still drag them yourself if you don't want to rely on automatic organization.
+Intercompartment repulsion indicates the amount of repulsion the special "compartment" nodes feel from each other;
+    does not directly affect any metabolite or reaction nodes.
+Boundary Repulsion indicates the strength the boundary nodes (invisible set of nodes surrounding the canvas) excert
+    on the rest of the nodes, useful for centering the nodes slightly (might make compartment nodes "clip out", in
+    which case you should fix them in place or lower the Boundary repulsion and dragging the compartment nodes back into the canvas).
+Input_metabolite-Input_metabolite Repulsion is used to spread the input and output metabolites.
+    These can only move on their own on the X-axis, you can still drag them yourself if you don't want to rely on automatic organization.
 Reaction-Metabolite Attraction is the strength attraction that nodes connected by lines/edges will feel to each other.
 Metabolite-Compartrment Attraction is the strenght the metabolites of a particular compartment will feel with their connected compartment node. Is mostly useful for separating clusters of reactions part of a single compartment.
 ```
