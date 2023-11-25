@@ -3,7 +3,7 @@
 
 
 ## What?
-This tool can load ESHER (https://escher.github.io/#/) JSON maps and ESHER-ready JSON Models created using COBRA (https://opencobra.github.io/cobratoolbox/stable/index.html) to allow for easy semi-automatic visiualization and editing of (small) network maps, which subsequently can be saved as ESHER-ready maps and further explored within ESCHER.
+This tool can load ESHER (https://escher.github.io/#/) JSON maps and ESHER-ready JSON Models created using COBRA (https://opencobra.github.io/cobratoolbox/stable/index.html), specifically originating from a task-approach such as CellFie (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8577426/), to allow for easy semi-automatic visiualization and editing of (small) network maps, which subsequently can be saved as ESHER-ready maps and further explored within ESCHER.
 
 ## Why? 
 At the department where I contributed to a project, we have several methods of creating submodels of larger metabolic networks. These submodels need to be explored to validate and verify their usefulness, normally done in ESCHER. This method is tedious and requires substantial time investment, therefore I thought it would be an interesting project to create an initial visualization tool in which users can (approximately) create the required network with only a few clicks of the mouse. Once acceptable, this can then be further loaded into ESCHER (as it is a lot prettier).
@@ -99,8 +99,31 @@ One can manually update the lists by double clicking
 
 ![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/08602957-3ad2-4356-8e13-5581cda20f4b)
 
+### Manually fixing nodes, changing visibility, or assigning a "special" mark"
+By clicking a node to move it, you will automatically freeze the node, these nodes are "fixed in place". You can manually fix/unfix such nodes by holding f + Left-mouse click. You can also change visibility of nodes in such a way by holding v + Left-mouse click on a node, this will change the visibility of the node. An invisible node will still be part of the simulation, but it, and connections to it, will be invisible. If you cannot find a particular node's location, you can always use the visible/not visible list (see above), to turn the node visible again. Last, to mark nodes as "special" for visualization purposes but also used for splitting nodes (see below), you can shift + Left_mouse click them. Clicking again will subsequently unmark them.
+
 ### Merging/Splitting nodes
 Sometimes some metabolites or reactions connect two different clusters of nodes and you might want to split these so that this one node does not pull both clusters to each other (and lead to a line stretching the entire screen). In this case you can manually seperate (split) the node by first marking some of its connections as "special" by Shift + Left-mouse button clicking (or holding Shift while drag selecting), then splitting the node with x + Left-mouse button. Split nodes will not be connected to each other, but can be merged by dragging one over one of its partners. Nodes can be split as many times as necessary and will remember all their partner nodes.
 ![ezgif com-optimize ESCHER DEMO Merging Splitting ](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/74c74dfd-6ec9-498b-b8cd-dfaf81d56bcb)
 
+### Search mode
+You might want to find/highlight a node without finding it in the list of visible/invisible nodes. For that you can press g and enter search mode. While in search mode, most controls (other than clicks from the mouse), will not work and instead you can type into the search box on the bottom right (you do not need to press the button). To exit search mode, press Escape. While searching you will see recommendations, to autocomplete a recommendation press tab. To select a node press enter. To change which recommnendation is selected use the up/down arrow keys (selected recommendation is highlighted). The text in the yellow boxes will show where approximately in the names of the suggestions your input exists.
 
+### Zooming in and out
+You might feel like you cannot see exactly what is going on somewhere, in those cases zooming in (e) or out (q), and moving (w, a, s, d keys or arrow keys) the canvas might help. Zooming in is only visual, so the physics calculations will remain exactly the same.
+
+### Other controls
+![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/5bc2e0c0-6cf0-423b-b2d8-36c0a71734cd)
+There are several buttons that can be used to change some aspects of the application.
+The show/unshow lines button will change the visibility of the lines connecting the nodes, while the show/unshow (default at unshow) compartments will show the special "compartment" nodes, to which each metabolite of that compartment is connected to. Color/uncolor (default uncolor) will change the color of the lines from white, to the color of the compartment the line is connected to. 
+Freeze all nodes and unfreeze all nodes will fix or unfix all nodes, if you have made a nice looking arrangement, be careful wiht the unfree button! Then there are the fontsize and rectangle size sliders, which change the fontsize of the text and the rectangle size respectively. Beneath those there are options for showing reaction and metabolite names, fixed metabolites are input/output metabolites of a specific task using the CellFie (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8577426/) approach.
+Fluxes and expression data can only be shown by uploading the designated excel file (see above).
+
+### Saving the simulation
+By clicking the "save latest simulation as .json" button, you can save your map, both for reloading into the application, but also applicable for importing it as a map for ESCHER where it can be further edited.
+
+#### Author notes:
+If there are any issues in the usage or you have some new ideas for killer features, please raise an issue on this Github. 
+You are free to use this however and whenever you like, if you use this for any analysis for papers, an acknoledgment or link would be nice but is not necessary!
+Dagl1 / Jelle Bonthuis
+Created: 25-11-2023
