@@ -139,6 +139,8 @@ By clicking the "save latest simulation as .json" button, you can save your map,
 
 #### Author notes:
 If there are any issues in the usage or you have some new ideas for killer features, please raise an issue on this Github. 
-You are free to use this however and whenever you like, if you use this for any analysis for papers, an acknoledgment or link would be nice but is not necessary!
-Dagl1 / Jelle Bonthuis
+You are free to use this however and whenever you like, if you use this for any analysis for papers, an acknoledgment or link would be nice but is not necessary! 
+
+Dagl1 / Jelle Bonthuis 
+
 Created: 25-11-2023
