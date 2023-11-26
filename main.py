@@ -196,6 +196,7 @@ class MetabolicNetwork:
         self.full_search_list =[]
         self.current_search_index = 0
         self.selected_search_item = None
+        self.show_expressionless_reaction_highlight = False
 
 
     def save_as_json(self):
@@ -613,7 +614,7 @@ class MetabolicNetwork:
         running = True
         pygame_on = True
         if pygame_on:
-            os.environ['SDL_VIDEO_WINDOW_POS'] = '1020,30'
+            os.environ['SDL_VIDEO_WINDOW_POS'] = '1040,30'
             pygame.init()
             display = pygame.display.set_mode([1500, 1200])
             text_input_rect = pygame.Rect(50, 50, 300, 40)
@@ -639,10 +640,15 @@ class MetabolicNetwork:
                             elif event.key == pygame.K_BACKSPACE:
                                 self.search_input_text = self.search_input_text[:-1]  # Remove the last character
                             elif event.key == pygame.K_RETURN:
-                                if len(self.search_suggestion_list) <2:
+                                if len(self.search_suggestion_list) == 0:
+                                    pass
+                                elif len(self.search_suggestion_list) <2:
                                     self.current_search_index = 0
-                                self.selected_search_item = self.search_suggestion_list[self.current_search_index]["node"]
-                                self.selected_search_item.selected_by_drag_selection = True
+                                    self.selected_search_item = self.search_suggestion_list[self.current_search_index]["node"]
+                                    self.selected_search_item.selected_by_drag_selection = not self.selected_search_item.selected_by_drag_selection
+                                else:
+                                    self.selected_search_item = self.search_suggestion_list[self.current_search_index]["node"]
+                                    self.selected_search_item.selected_by_drag_selection = not self.selected_search_item.selected_by_drag_selection
                                 self.search_input_text = ''  # Clear the input text after processing
                             elif event.key == pygame.K_TAB:
                                 #finish search
@@ -1124,7 +1130,6 @@ class MetabolicNetwork:
                                                 for idx3, compartment in enumerate(self.compartments):
                                                     if self.all_network_nodes[idx].instance.compartment == compartment.id:
                                                         color_ = (40 + (idx3 * 60) % 255, 100, 0)
-                                                        print(scaled_x_start, scaled_x_end, scaled_y_start, scaled_y_end, color_)
                                                         self.draw_arrow_head((scaled_x_start, scaled_y_start), (scaled_x_end, scaled_y_end), display, color_)
                                                         break
                                             if self.all_network_nodes[idx2].node_type == "metabolite":
@@ -1155,8 +1160,11 @@ class MetabolicNetwork:
                                 text_surface = self.font.render(str(self.expression_dict[node.instance.id]), True, (0, 255, 0))
                                 text_rect = text_surface.get_rect()
                                 text_rect.topright = ((node.rect.topright[0] + self.rect_size) * self.zoom_factor - self.viewport.x,
-                                                      (node.rect.topright[1] - self.rect_size) * self.zoom_factor - self.viewport.y)
+                                                      (node.rect.topright[1] - self.rect_size-5) * self.zoom_factor - self.viewport.y)
                                 display.blit(text_surface, text_rect)
+                                if self.show_expressionless_reaction_highlight and self.expression_dict[node.instance.id] ==-1:
+                                    inflated_rect = text_rect.inflate(5,5)
+                                    pygame.draw.rect(display, (255,0,0), inflated_rect, width = 1)
                             except Exception as e:
                                 pass
                 if self.search_mode_enabled:
@@ -1468,12 +1476,10 @@ class MetabolicNetwork:
 
         lowest_node.split_of_nodes_partners.remove(highest_node)
         if len(lowest_node.split_of_nodes_partners)==0:
-            lowest_node.instance.id = lowest_node.instance.name
-            match = re.match(r'^(.+[a-zA-Z]?)(?:_\d+)?$', lowest_node.instance.id)
+            match = re.match(r'^(.*?[a-zA-Z])(?:_\d+)?$', lowest_node.instance.id)
             if match:
-               lowest_node.instance.id = match.group(1)
-            lowest_node.instance.name = lowest_node.instance.name
-            match = re.match(r'^(.+[a-zA-Z]?)(?:_\d+)?$', lowest_node.instance.name)
+                lowest_node.instance.id = match.group(1)
+            match = re.match(r'^(.*?[a-zA-Z\s()-]+?)(?:_\d+)?$|^(.*?\))_\d+$', lowest_node.instance.name)
             if match:
                 lowest_node.instance.name = match.group(1)
         else:
@@ -1481,13 +1487,8 @@ class MetabolicNetwork:
                 partners.split_of_nodes_partners.remove(highest_node)
 
         self.all_network_nodes.remove(highest_node)
-        # for idx,node in enumerate(self.all_network_nodes):
-        #     node.id_number = idx
-        # find lowest number id instance and combine into that one
-
-        # combine all input/output instances
-        # update the partners list
-        # adjust partner id number if 0 in partners list
+        for idx,node in enumerate(self.all_network_nodes):
+            node.id_number = idx
         remaining_node = lowest_node
         self.update_edge_network()
         return remaining_node
@@ -1596,6 +1597,7 @@ class Application:
         self.create_save_latest_simulation()
         self.create_load_previously_made_model()
         self.create_color_uncolor_lines_button()
+        self.create_highlight_expressionless_button()
 
         width_ = self.root.winfo_width()
         height_ = self.root.winfo_height()
@@ -1770,7 +1772,7 @@ class Application:
 
     def create_slider_fixed_metabolite_slider(self):
         # self.root.grid_rowconfigure(1, weight=1, maxsize=50)  # Adjust minsize as needed
-        label = tk.Label(self.root, text="Input_metabolite-Input_metabolite Repulsion")
+        label = tk.Label(self.root, text="Input_metabolite-Output_metabolite Repulsion")
         label.grid(row=8, column=3, columnspan=2, padx=10, pady=5, sticky="ew")
 
         scale = tk.Scale(self.root, from_=0, to=50000, orient=tk.HORIZONTAL, command=self.update_fixed_metabolite_repulsion_slider)
@@ -1809,9 +1811,9 @@ class Application:
 
     def create_font_size_slider(self):
         label = tk.Label(self.root, text="Fontsize")
-        label.grid(row=7, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        label.grid(row=8, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
         slider = tk.Scale(self.root, from_=1, orient=tk.HORIZONTAL, to=50, command=self.on_font_size_slider)
-        slider.grid(row=8, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        slider.grid(row=9, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
         slider.set(self.met_network.font_size)
 
     def on_font_size_slider(self, value):
@@ -1822,9 +1824,9 @@ class Application:
 
     def create_rect_size_slider(self):
         label = tk.Label(self.root, text="Rectangle size")
-        label.grid(row=9, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        label.grid(row=10, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
         slider = tk.Scale(self.root, from_=1, to=50, orient=tk.HORIZONTAL, command=self.on_rect_size_slider)
-        slider.grid(row=10, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        slider.grid(row=11, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
         slider.set(self.met_network.font_size)
 
     def on_rect_size_slider(self, value):
@@ -1832,9 +1834,9 @@ class Application:
 
     def create_line_width_slider(self):
         label = tk.Label(self.root, text="Line Width")
-        label.grid(row=11, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        label.grid(row=12, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
         slider = tk.Scale(self.root, from_=1, to=50, orient=tk.HORIZONTAL, command=self.on_line_width_slider)
-        slider.grid(row=12, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+        slider.grid(row=13, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
         slider.set(self.met_network.font_size)
 
     def on_line_width_slider(self, value):
@@ -1905,6 +1907,13 @@ class Application:
 
     def on_color_uncolor_lines_button_click(self):
         self.met_network.show_color_lines = not self.met_network.show_color_lines
+
+    def create_highlight_expressionless_button(self):
+        button = tk.Button(self.root, text="Highlight expressionless reactions expression", command=self.on_highlight_expressionless_button_click)
+        button.grid(row=7, column=0, padx=5, pady=5, sticky="ew")
+
+    def on_highlight_expressionless_button_click(self):
+        self.met_network.show_expressionless_reaction_highlight = not self.met_network.show_expressionless_reaction_highlight
     def create_restart_latest_simulation(self):
         button = tk.Button(self.root, text="Restart the latest simulation", command=self.on_restart_latest_simulation_click)
         button.grid(row=6, column=2, padx=5, pady=5, sticky="ew")
@@ -1921,7 +1930,7 @@ class Application:
         file_path = filedialog.asksaveasfilename(defaultextension=".json" , filetypes=[("JSON files", "*.json")])
 
         with open(file_path, "w") as file:
-            json.dump(self.met_network.full_json_dict, file, indent =4)
+            json.dump([self.met_network.full_json_dict], file, indent =4)
 
     def create_load_previously_made_model(self):
         button = tk.Button(self.root, text="Load previously made JSON model", command=self.on_load_previously_made_model_click)
@@ -1935,7 +1944,7 @@ class Application:
 
 
     def create_update_visible_button(self):
-        button = tk.Button(self.root, text="Update visibility based on included metabolites", command=self.on_update_visible_button_click)
+        button = tk.Button(self.root, text="Update visibility based on included nodes", command=self.on_update_visible_button_click)
         button.grid(row=4, column=1, padx=5, pady=5, sticky="ew")
 
     def on_update_visible_button_click(self):
