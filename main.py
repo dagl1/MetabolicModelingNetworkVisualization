@@ -13,6 +13,8 @@ import openpyxl
 import pickle
 import copy
 import re
+import sys
+from datetime import datetime
 
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
@@ -213,26 +215,322 @@ class MetabolicNetwork:
         self.full_json_dict["fluxes_dict"] = self.fluxes_dict
         self.full_json_dict["expression_dict"] = self.expression_dict
         self.full_json_dict["node_xy_save_dict"] = node_xy_save_dict
+
+        self.formulate_metadata_dict()
+        self.formulate_main_ESHER_dict()
+        self.remove_duplicate_main_nodes()
+        self.list_with_dicts_to_save = [ self.meta_data_dict, self.main_ESHER_dict]
+        #self.formulate_labels_dict()
+        #self.formulate_canvas_dict()
+
         pass
 
-    def read_from_json(self,data):
-        json_dict = data# placehold
-        is_visual_json = False
-        for key_,  element in json_dict.items():
-            if isinstance(element, dict):
-                for key, value in json_dict.items():
-                    if key == "fluxes_dict":
-                        is_visual_json = True
 
-            elif isinstance(element, list):
-                #logic for checking if from escher and loading the necessary files.
-                pass
-        for key_, element in json_dict.items():
-            if isinstance(element,dict):
-                if is_visual_json:
+    def formulate_metadata_dict(self):
+        self.meta_data_dict = {}
+        date = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        self.meta_data_dict = {
+            "map_name": "new_map",
+            "map_id": "000000000",
+            "map_description": f"\nLast Modified {date}",
+            "homepage": "https://escher.github.io", "schema": "https://escher.github.io/escher/jsonschema/1-0-0#",
+            "not_escher_dict": self.full_json_dict
+        }
+
+    def formulate_main_ESHER_dict(self):
+        self.main_ESHER_dict ={}
+        node_counter =0
+        segment_counter = 0
+        nodes_dict = {}
+        reaction_counter  = 0
+        expansion_constant = 5
+        self.main_ESHER_dict["reactions"]={}
+        for node in self.all_network_nodes:
+            segments_dict = {}
+            if node.node_type == "reaction" and node.visible_by_mouse:
+                # calculate closests input and output nodes and designate them as main, all else will be build separately
+                distance = 100000000000
+                closest_input_node = None
+                for input_instance in node.input_instances:
+                    for temp_node in self.all_network_nodes:
+                        if temp_node.node_type == "metabolite"and input_instance==temp_node.instance and temp_node.visible_by_mouse:
+                            input_node = temp_node
+                            break
+                    node_distance =  math.sqrt((input_node.x - node.x)**2 + (input_node.y - node.y)**2)
+                    if closest_input_node is None or node_distance < distance:
+                        distance = node_distance
+                        closest_input_node = input_node
+
+                distance = 10000000000000
+                closest_output_node = None
+                for output_instance in node.output_instances:
+                    for temp_node in self.all_network_nodes:
+                        if temp_node.node_type == "metabolite"and output_instance == temp_node.instance and temp_node.visible_by_mouse:
+                            output_node = temp_node
+                    node_distance =  math.sqrt((output_node.x - node.x)**2 + (output_node.y - node.y)**2)
+                    if closest_output_node is None or node_distance<distance:
+                        distance = node_distance
+                        closest_output_node = output_node
+
+
+                ## create node and reaction entry
+
+                start_node_counter = node_counter
+                main_x, main_y = node.x, node.y
+
+                # static segments:
+                segments_dict[segment_counter] = {
+                    "from_node_id": str(start_node_counter),
+                    "to_node_id": str(start_node_counter+1),
+                    "b1": None,
+                    "b2": None
+                }
+                segment_counter += 1
+
+                segments_dict[segment_counter] = {
+                    "from_node_id": str(start_node_counter+1),
+                    "to_node_id": str(start_node_counter+2),
+                    "b1": None,
+                    "b2": None
+                }
+                segment_counter += 1
+
+                nodes_dict[node_counter] = {
+                    "node_type":"multimarker",
+                    "x": expansion_constant*main_x,
+                    "y": expansion_constant*(main_y) -40,
+                }
+                node_counter +=1
+
+                nodes_dict[node_counter] = {
+                    "node_type":"midmarker",
+                    "x": expansion_constant*main_x,
+                    "y": expansion_constant*(main_y) -10,
+                }
+                node_counter +=1
+
+                nodes_dict[node_counter] = {
+                    "node_type":"multimarker",
+                    "x": expansion_constant*main_x,
+                    "y": expansion_constant*(main_y) +20,
+                }
+                node_counter +=1
+
+                before_input_counter = node_counter
+                if closest_output_node is not None:
+                    nodes_dict[node_counter] = {
+                        "node_type": "metabolite",
+                        "x": expansion_constant * closest_output_node.x,
+                        "y": expansion_constant * closest_output_node.y,
+                        "bigg_id": closest_output_node.instance.id,
+                        "name": closest_output_node.instance.name,
+                        "label_x": expansion_constant * closest_output_node.x - 20,
+                    "label_y": expansion_constant * closest_output_node.y - 20,
+                    "node_is_primary": True
+                    }
+                    node_counter +=1
+
+                    segments_dict[segment_counter] = {
+                        "from_node_id": str(node_counter-1),
+                        "to_node_id": str(start_node_counter),
+                        "b1": { "x": expansion_constant * closest_output_node.x+50,
+                                "y": expansion_constant * closest_output_node.y+50},
+                        "b2": {"x": expansion_constant * main_x,
+                               "y": expansion_constant * (main_y)-40 }
+                    }
+                    segment_counter += 1
+
+
+                for idx, input_instance in enumerate(node.output_instances):
+                    if input_instance != closest_output_node.instance:
+                        nodes_dict[node_counter] = {
+                            "node_type": "metabolite",
+                            "x": expansion_constant* (main_x) + (idx*40)-30,
+                            "y": expansion_constant* (main_y)-120,
+                            "bigg_id": input_instance.id,
+                            "name": input_instance.name,
+                            "label_x": expansion_constant *(main_x) + (idx*40) -50,
+                            "label_y": expansion_constant * (main_y)-120 - 20,
+                            "node_is_primary": False
+                        }
+                        node_counter += 1
+
+                        segments_dict[segment_counter] = {
+                            "from_node_id": str(node_counter - 1),
+                            "to_node_id": str(start_node_counter),
+                            "b1": {"x": expansion_constant * (main_x) + (idx*40)-30,
+                                   "y":  expansion_constant * (main_y)-120},
+                            "b2": {"x": expansion_constant*main_x ,
+                                   "y": expansion_constant* (main_y) - 40}
+                        }
+                        segment_counter += 1
+
+                before_output_node_counter = node_counter
+
+                if closest_input_node is not None:
+                    nodes_dict[node_counter] = {
+                        "node_type": "metabolite",
+                        "x": expansion_constant* closest_input_node.x,
+                        "y": expansion_constant* closest_input_node.y,
+                        "bigg_id": closest_input_node.instance.id,
+                        "name": closest_input_node.instance.name,
+                        "label_x": expansion_constant * closest_input_node.x - 20,
+                        "label_y": expansion_constant * closest_input_node.y + 20,
+                        "node_is_primary": True
+                    }
+                    node_counter += 1
+                    segments_dict[segment_counter] = {
+                        "from_node_id": str(start_node_counter + 2),
+                        "to_node_id": str(node_counter - 1),
+                        "b1": {"x":expansion_constant*main_x,
+                               "y":expansion_constant*main_y + 20},
+                        "b2": { "x": expansion_constant * closest_input_node.x-50,
+                                "y": expansion_constant * closest_input_node.y-50}
+                    }
+                    segment_counter += 1
+
+                for idx, input_instance in enumerate(node.input_instances):
+                    if input_instance != closest_input_node.instance:
+                        nodes_dict[node_counter] = {
+                            "node_type": "metabolite",
+                            "x": expansion_constant*main_x + (idx * 40)-30,
+                            "y": expansion_constant*main_y + 120,
+                            "bigg_id": input_instance.id,
+                            "name": input_instance.name,
+                            "label_x": expansion_constant*main_x + (idx * 40) - 50,
+                            "label_y": expansion_constant*main_y +120 - 20,
+                            "node_is_primary": False
+                        }
+                        node_counter += 1
+
+                        segments_dict[segment_counter] = {
+                            "from_node_id": str(start_node_counter + 2),
+                            "to_node_id": str(node_counter-1),
+                            "b1": {"x":expansion_constant*main_x,
+                                   "y":expansion_constant*main_y +20},
+                            "b2": {"x":expansion_constant*main_x + (idx * 40)-30-50,
+                                   "y": expansion_constant*main_y+120 -50}
+                        }
+                        segment_counter += 1
+                metabolites_list_with_dicts = []
+                for met, stoichiometry in node.instance.metabolites.items():
+                    dict_to_add = {"bigg_id": met, "coefficient": stoichiometry}
+                    metabolites_list_with_dicts.append(dict_to_add)
+
+
+                self.main_ESHER_dict["reactions"][reaction_counter] = {
+                    "name": node.instance.name,
+                    "bigg_id": node.instance.id,
+                    "reversibility": False,
+                    "label_x": expansion_constant*main_x + 50,
+                    "label_y": expansion_constant*main_y,
+                    "gene_reaction_rule": "",
+                    "genes": [{}],
+                    "metabolites": metabolites_list_with_dicts,
+                    "segments" : segments_dict
+                }
+                reaction_counter+=1
+        self.main_ESHER_dict["nodes"]=nodes_dict
+        self.main_ESHER_dict["text_labels"] = {}
+        self.main_ESHER_dict["canvas"] = {
+            "x": -1000,
+            "y": -500,
+            "width": 10000,
+            "height": 7000
+        }
+
+    def remove_duplicate_main_nodes(self):
+        list_to_remove = []
+        for id, node_dict in self.main_ESHER_dict["nodes"].items():
+            if node_dict["node_type"] == "metabolite" and node_dict["node_is_primary"]:
+                list_with_ids = []
+                for id2, node_dict2 in self.main_ESHER_dict["nodes"].items():
+                    if id != id2 and node_dict2["node_type"] == "metabolite" and node_dict2["node_is_primary"] and node_dict2["bigg_id"] == node_dict["bigg_id"]:
+                        list_with_ids.append(id2)
+                        node_dict2["bigg_id"] = f"removed {id2}"
+                for reaction_id, reaction_dict in self.main_ESHER_dict["reactions"].items():
+                    segments = reaction_dict["segments"]
+                    for value in segments.values():
+                        #print(value,list_with_ids)
+                        if int(value["from_node_id"]) in list_with_ids:
+                            value["from_node_id"] = id
+                        if int(value["to_node_id"]) in list_with_ids:
+                            value["to_node_id"] = id
+                list_to_remove.extend(list_with_ids)
+        for key in list_to_remove:
+            if key in self.main_ESHER_dict["nodes"]:
+                del self.main_ESHER_dict["nodes"][key]
+
+
+
+    def find_main_metabolite_nodes(self):
+         self.big_metabolite_nodes = []
+         for node in self.all_network_nodes:
+             if node.node_type == "reaction" and node.visible_by_mouse:
+                 reaction_instance = node.instance
+                 mets = reaction_instance.metabolites
+
+                 lowest_connection_input_reaction_number = None
+                 lowest_connection_output_reaction_number = None
+                 lowest_connection_input_metabolite = None
+                 lowest_connection_output_metabolite = None
+                 for metabolite, stoichiometry in mets.items():
+                     metabolite_instance = self.find_metabolite(metabolite)
+                     if stoichiometry < 0: #input reaction
+                         amount_of_reactions_where_metabolite_is_input = self.determine_true_amount_of_reactions(metabolite_instance, "input")
+                         if lowest_connection_input_reaction_number == None or lowest_connection_input_reaction_number > amount_of_reactions_where_metabolite_is_input:
+                             lowest_connection_input_reaction_number = amount_of_reactions_where_metabolite_is_input
+                             lowest_connection_input_metabolite = metabolite_instance
+                     else:
+                         amount_of_reactions_where_metabolite_is_output = self.determine_true_amount_of_reactions(metabolite_instance, "output")
+                         if lowest_connection_output_reaction_number == None or lowest_connection_output_reaction_number > amount_of_reactions_where_metabolite_is_output:
+                             lowest_connection_output_reaction_number = amount_of_reactions_where_metabolite_is_output
+                             lowest_connection_output_metabolite = metabolite_instance
+                 node.main_metabolite_connections = [lowest_connection_input_metabolite, lowest_connection_output_metabolite]
+
+
+    def determine_true_amount_of_reactions(self, metabolite_instance, input_or_output):
+        name_to_check = re.sub(r'\[.\]$', '', metabolite_instance.name)
+        other_instances_with_similiar_name = [metabolite_instance]
+        for metabolite in self.metabolites_nodes:
+            if re.sub(r'\[.\]$', '', metabolite.name) == name_to_check:
+                other_instances_with_similiar_name.append(metabolite)
+        amount_of_reactions = 0
+        if input_or_output == "input":
+            for instance in other_instances_with_similiar_name:
+                for reaction in self.reaction_edges:
+                    for met, stoichiometry in reaction.metabolites.items():
+                        if stoichiometry < 0 and instance.id == met:
+                            amount_of_reactions +=1
+            return amount_of_reactions
+
+        else:
+            for instance in other_instances_with_similiar_name:
+                for reaction in self.reaction_edges:
+                    for met, stoichiometry in reaction.metabolites.items():
+                        if stoichiometry > 0 and instance.id == met:
+                            amount_of_reactions +=1
+            return amount_of_reactions
+
+    def formulate_labels_dict(self):
+        self.main_ESHER_dict["text_labels"] = {}
+    def formulate_canvas_dict(self):
+        self.main_ESHER_dict["canvas"] = {
+            "x": -2000, "y": -1000, "width": 10000, "height": 10000
+        }
+
+    def read_from_json(self,data):
+        escher_exists = False
+        visualization_network_exists = False
+        for dicts in data:
+            if "not_escher_dict" in dicts:
+                visualization_network_exists = True
+                for key_, element in dicts["not_escher_dict"].items():
                     self.full_json_dict[key_] = element
-        if is_visual_json:
-            self.calculate_network(is_visual_json)
+                break
+
+        if visualization_network_exists:
+            self.calculate_network(visualization_network_exists)
 
     def filter_input_output_reactions(self):
         reaction_edges_copy = []
@@ -614,9 +912,9 @@ class MetabolicNetwork:
         running = True
         pygame_on = True
         if pygame_on:
-            os.environ['SDL_VIDEO_WINDOW_POS'] = '1040,30'
+            os.environ['SDL_VIDEO_WINDOW_POS'] = '100,30' # TODO ADD IN DEFAULT SETTING
             pygame.init()
-            display = pygame.display.set_mode([1500, 1200])
+            display = pygame.display.set_mode([900, 800])
             text_input_rect = pygame.Rect(50, 50, 300, 40)
             self.viewport = pygame.Rect(0, 0, 1500, 1200)
             self.font = pygame.font.SysFont(None, self.font_size)
@@ -693,8 +991,8 @@ class MetabolicNetwork:
                         elif event.key == pygame.K_q:
                             previous_zoom_factor = self.zoom_factor
                             self.zoom_factor -= 1
-                            if self.zoom_factor < 1:
-                                self.zoom_factor = 1
+                            if self.zoom_factor < 0.5:
+                                self.zoom_factor = 0.5
                             current_zoom_factor = self.zoom_factor
                             if previous_zoom_factor != current_zoom_factor:
                                 zoom_ratio = current_zoom_factor / previous_zoom_factor
@@ -1130,16 +1428,22 @@ class MetabolicNetwork:
                                                 for idx3, compartment in enumerate(self.compartments):
                                                     if self.all_network_nodes[idx].instance.compartment == compartment.id:
                                                         color_ = (40 + (idx3 * 60) % 255, 100, 0)
+                                                        if node.highlighted_by_mouse or self.all_network_nodes[idx2].highlighted_by_mouse :
+                                                            color_ = (255,0,0)
                                                         self.draw_arrow_head((scaled_x_start, scaled_y_start), (scaled_x_end, scaled_y_end), display, color_)
                                                         break
                                             if self.all_network_nodes[idx2].node_type == "metabolite":
                                                 for idx3, compartment in enumerate(self.compartments):
                                                     if self.all_network_nodes[idx2].instance.compartment == compartment.id:
                                                         color_ = (40 + (idx3 * 60) % 255, 100, 0)
+                                                        if node.highlighted_by_mouse or self.all_network_nodes[idx2].highlighted_by_mouse:
+                                                            color_ = (255,0,0)
                                                         self.draw_arrow_head((scaled_x_start, scaled_y_start), (scaled_x_end, scaled_y_end), display, color_)
                                                         break
                                         else:
                                             color_= (255,255,255)
+                                            if node.highlighted_by_mouse or self.all_network_nodes[idx2].highlighted_by_mouse:
+                                                color_ = (255, 0, 0)
                                             self.draw_arrow_head((scaled_x_start, scaled_y_start), (scaled_x_end, scaled_y_end), display, color_)
 
                 if self.show_flux_expression == "Fluxes" or self.show_flux_expression == "Both flux and expression":
@@ -1318,9 +1622,9 @@ class MetabolicNetwork:
                 node.x += node.x_vector * SMALL_CONSTANT
             else:
                 node.x += node.x_vector * SMALL_CONSTANT
-                node.x = node.x % width
+                node.x = node.x % (width-50)
                 node.y += node.y_vector * SMALL_CONSTANT
-                node.y = node.y % height
+                node.y = node.y % (height-50)
             if node.x > width:
                 node.x = width
             elif node.x < 0:
@@ -1500,6 +1804,7 @@ class MetabolicNetwork:
         pass
 
 
+
 class Application:
     def __init__(self, root, width, height):
         self.root = root
@@ -1517,6 +1822,7 @@ class Application:
         entry = tk.Entry(self.root, textvariable=self.entry_var, state="readonly", width=40)
         entry.pack(pady=10)
 
+
         self.browse_button = tk.Button(self.root, text="Browse", command=self.browse_file)
         self.browse_button.pack(pady=10)
 
@@ -1527,7 +1833,20 @@ class Application:
         self.network_window = None
 
         self.selected_option = tk.StringVar()
+        self.get_user_input()
 
+    def get_user_input(self):
+        if len(sys.argv) > 1:
+            filename = sys.argv[1]
+            full_path = os.path.abspath(filename)
+            self.entry_var.set(full_path)
+            self.upload_file()
+
+            return False
+
+        else:
+            # Not running in an interactive terminal
+             return True
 
     def check_queue(self):
         while True:
@@ -1930,7 +2249,7 @@ class Application:
         file_path = filedialog.asksaveasfilename(defaultextension=".json" , filetypes=[("JSON files", "*.json")])
 
         with open(file_path, "w") as file:
-            json.dump([self.met_network.full_json_dict], file, indent =4)
+            json.dump(self.met_network.list_with_dicts_to_save, file, indent =4 )
 
     def create_load_previously_made_model(self):
         button = tk.Button(self.root, text="Load previously made JSON model", command=self.on_load_previously_made_model_click)
