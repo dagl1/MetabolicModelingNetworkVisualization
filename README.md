@@ -68,7 +68,7 @@ In case you already have a pre-made JSON map you can upload this by clicking the
 In addition one can upload an Excel by pressing "Browse excel file" and subsequently "upload excel file". If you are running the program through an IDE, a text prompt will indicate if the excel file was accepted or not. This file should have no headers and contain the flux per reation in column 2, expression data per reaction in column 3, reaction IDs in MARxxxx notaion in column 4, and regular reaction names in column 5:
 ![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/09d280e5-396b-4115-aa57-d372b794d561)
 
-Running a pre-made map uploaded to the program can be ran by clicking the "Restart the latest simulation" button. 
+Running a pre-made map uploaded to the program can be ran by clicking the "Restart the latest simulation" button, note that all nodes will start frozen, press the "Unfreeze all nodes" button to allow for movement of the nodes.
 To start a new simulation using just the JSON model and the current settings, press the "Start simulation" button.
 
 **As of right now, this program is only fully functional for an irreversible COBRA model, reversible models will not show directionality correctly, have too many nodes, and might not save correctly too ESCHER** 
