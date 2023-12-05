@@ -146,7 +146,7 @@ You might feel like you cannot see exactly what is going on somewhere, in those 
 Just like most text editing software, you can use Ctrl + Z to undo movement actions, and Ctrl + Y to redo undone movement actions. If you undo, then perform a new move action, your action still stored in the "redo" actions will be lost.
 
 ### Canvas settings
-Some users reported that the canvas was too large for their screen, so now you manually set the canvas of the simulation in the options menu.
+Some users reported that the canvas was too large for their screen, so now you manually set the canvas of the simulation in the options menu. To lock-in your new canvas width and height, click the "Set Dimensions" button.
 
 ### Other controls
 There are several buttons that can be used to change some aspects of the application.
