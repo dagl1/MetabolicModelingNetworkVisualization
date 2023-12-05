@@ -42,7 +42,7 @@ For both of these approaches, you will need to have the requirements.txt file in
 ## Running
 To run the application after installing all required packages, run main.py through the console using:
 ``` cmd
-cd C:/location/of/your/main/file
+cd C:/location/of/your/main.py/file
 python main.py 
 ```
 A window should open where a JSON file can be uploaded, this JSON file should have been created from a COBRA model using the "save_json_model()" function:
@@ -56,6 +56,11 @@ A window should open where a JSON file can be uploaded, this JSON file should ha
     save_json_model(model, json_path)
 ```
 Confirming the file by uploading it to the application will open the settings screen. 
+**Alternatively, you can run the file directly by providing the file's location (either absolute path, or filename if it is in the correct folder).**
+``` cmd
+python main.py json/file/location/json_file.json
+```
+
 In case you already have a pre-made JSON map you can upload this by clicking the "upload previously made JSON model" button. 
 (the JSON maps are not to be confused with the aforementioned JSON model; a map is the positions of the particular nodes, either created through this app or taken from ESCHER using the Map > Save map JSON option.)
 ![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/61a832e5-69b5-41ab-b4c4-e9e57de79206)
@@ -65,6 +70,8 @@ In addition one can upload an Excel by pressing "Browse excel file" and subseque
 
 Running a pre-made map uploaded to the program can be ran by clicking the "Restart the latest simulation" button. 
 To start a new simulation using just the JSON model and the current settings, press the "Start simulation" button.
+
+**As of right now, this program is only fully functional for an irreversible COBRA model, reversible models will not show directionality correctly, have too many nodes, and might not save correctly too ESCHER** 
 
 ## Settings
 The settings of this application update the simulation real time, it is therefore not necessary to set particular settings before running the simulation. However it is of course the case your final outcome may differ if you change settings during a run versus starting with those settings. In those cases, click the "Stop simulation" button. To start the latest run, press the "Restart the latest simulation" button, while for running a new simulation with the current settings, click the "Start simulation" button again.
@@ -82,6 +89,11 @@ Shift + Left-mouse button (click node) to mark/unmark node as "special"
 X + Left-Mouse button to split nodes based on marked "special" nodes
 F + Left-Mouse button to fix/unfix node
 V + Left-mouse button OR Middle-mouse button to make/unmake nodes visible (invisible nodes can be added back through the visibility list (see "Included/not included and visible/not visible" below)
+Ctrl + Z will undo the last movement action
+Ctrl + Y will redo the last undone movement action
+Ctrl + F OR Shift + F can unfix/fix all selected nodes
+Ctrl + 1-9 Will designate currently selected nodes as part of a control-group (designated by the number)
+1-9 Select nodes part of the control group of the corresponding number
 G to enter search mode
 (In search mode) Escape to exit search mode
 (In search mode) Tab to select suggestion
@@ -118,6 +130,8 @@ One can manually update the lists by double clicking
 ### Manually fixing nodes, changing visibility, or assigning a "special" mark"
 By clicking a node to move it, you will automatically freeze the node, these nodes are "fixed in place". You can manually fix/unfix such nodes by holding f + Left-mouse click. You can also change visibility of nodes in such a way by holding v + Left-mouse click on a node, this will change the visibility of the node. An invisible node will still be part of the simulation, but it, and connections to it, will be invisible. If you cannot find a particular node's location, you can always use the visible/not visible list (see above), to turn the node visible again. Last, to mark nodes as "special" for visualization purposes but also used for splitting nodes (see below), you can shift + Left_mouse click them. Clicking again will subsequently unmark them.
 
+When selecting a group of nodes and subsequently moving them, these nodes will all become fixed. You can unfix them by pressing Ctrl + f or Shift + f, which will fix/unfix the selected nodes. In cases where some of the selected nodes are fixed, while others are unfixed, the program will fix/unfix all of them to one status (they will all beocme fixed/unfixed depending on the first node's status).
+
 ### Merging/Splitting nodes
 Sometimes some metabolites or reactions connect two different clusters of nodes and you might want to split these so that this one node does not pull both clusters to each other (and lead to a line stretching the entire screen). In this case you can manually seperate (split) the node by first marking some of its connections as "special" by Shift + Left-mouse button clicking (or holding Shift while drag selecting), then splitting the node with x + Left-mouse button. Split nodes will not be connected to each other, but can be merged by dragging one over one of its partners. Nodes can be split as many times as necessary and will remember all their partner nodes.
 ![ezgif com-optimize ESCHER DEMO Merging Splitting ](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/74c74dfd-6ec9-498b-b8cd-dfaf81d56bcb)
@@ -128,12 +142,19 @@ You might want to find/highlight a node without finding it in the list of visibl
 ### Zooming in and out
 You might feel like you cannot see exactly what is going on somewhere, in those cases zooming in (e) or out (q), and moving (w, a, s, d keys or arrow keys) the canvas might help. Zooming in is only visual, so the physics calculations will remain exactly the same.
 
+### Undo and redo
+Just like most text editing software, you can use Ctrl + Z to undo movement actions, and Ctrl + Y to redo undone movement actions. If you undo, then perform a new move action, your action still stored in the "redo" actions will be lost.
+
+### Canvas settings
+Some users reported that the canvas was too large for their screen, so now you manually set the canvas of the simulation in the options menu.
+
 ### Other controls
 There are several buttons that can be used to change some aspects of the application.
 The show/unshow lines button will change the visibility of the lines connecting the nodes, while the show/unshow (default at unshow) compartments will show the special "compartment" nodes, to which each metabolite of that compartment is connected to. Color/uncolor (default uncolor) will change the color of the lines from white, to the color of the compartment the line is connected to. 
 Freeze all nodes and unfreeze all nodes will fix or unfix all nodes, if you have made a nice looking arrangement, be careful wiht the unfree button! Then there are the fontsize and rectangle size sliders, which change the fontsize of the text and the rectangle size respectively. Beneath those there are options for showing reaction and metabolite names, fixed metabolites are input/output metabolites of a specific task using the CellFie (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8577426/) approach.
 Fluxes and expression data can only be shown by uploading the designated excel file (see above).
 ![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/5bc2e0c0-6cf0-423b-b2d8-36c0a71734cd)
+
 ### Saving the simulation
 By clicking the "save latest simulation as .json" button, you can save your map, both for reloading into the application, but also applicable for importing it as a map for ESCHER where it can be further edited.
 
