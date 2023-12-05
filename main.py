@@ -1961,7 +1961,7 @@ class Application:
 
     def get_user_input(self):
         if len(sys.argv) > 1:
-            filename = sys.argv[1]
+            filename = ' '.join(sys.argv[1:])
             full_path = os.path.abspath(filename)
             self.entry_var.set(full_path)
             self.upload_file()
