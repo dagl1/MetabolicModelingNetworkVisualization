@@ -199,7 +199,13 @@ class MetabolicNetwork:
         self.current_search_index = 0
         self.selected_search_item = None
         self.show_expressionless_reaction_highlight = False
-
+        self.canvas_width = 900
+        self.canvas_height = 800
+        self.current_command = None
+        self.previous_commands = []
+        self.next_commands_undone =[]
+        self.control_groups_for_selection = {1:[],2:[],3:[],4:[],5:[],6:[],7:[],8:[],9:[]}
+        self.start_command_recording = True
 
     def save_as_json(self):
         node_xy_save_dict = {}
@@ -914,7 +920,7 @@ class MetabolicNetwork:
         if pygame_on:
             os.environ['SDL_VIDEO_WINDOW_POS'] = '100,30' # TODO ADD IN DEFAULT SETTING
             pygame.init()
-            display = pygame.display.set_mode([900, 800])
+            display = pygame.display.set_mode([self.canvas_width, self.canvas_height])
             text_input_rect = pygame.Rect(50, 50, 300, 40)
             self.viewport = pygame.Rect(0, 0, 1500, 1200)
             self.font = pygame.font.SysFont(None, self.font_size)
@@ -923,7 +929,7 @@ class MetabolicNetwork:
             key_actions = {"left_mouse_clicked": False, "right_mouse_clicked": False, "middle_mouse_clicked": False,
                            "shift_clicked": False, "v_clicked": False, "split_clicked": False, "up_clicked": False, "down_clicked": False,
                            "right_clicked": False, "left_clicked": False, "f_clicked": False, "g_clicked": False, "tab_clicked": False,
-                           "enter_clicked": False, "escape clicked": False}
+                           "enter_clicked": False, "escape clicked": False, "control_clicked": False}
             selected_node = None
         while running:
             if pygame_on:
@@ -952,6 +958,7 @@ class MetabolicNetwork:
                                 #finish search
                                 if len(self.search_suggestion_list)>0:
                                     self.search_input_text = self.search_suggestion_list[self.current_search_index]["text"]
+                                    self.current_search_index = 0
                             elif event.key == pygame.K_UP:
                                 if len(self.search_suggestion_list)==0:
                                     pass
@@ -976,6 +983,54 @@ class MetabolicNetwork:
 
                         elif event.key == pygame.K_F1:
                             running = False
+                        elif event.key == pygame.K_1 and key_actions["control_clicked"]:
+                            self.add_currently_selected_to_control_group(1)
+                        elif event.key == pygame.K_1:
+                            self.select_control_group(1)
+
+                        elif event.key == pygame.K_2 and key_actions["control_clicked"]:
+                            self.add_currently_selected_to_control_group(2)
+                        elif event.key == pygame.K_2:
+                            self.select_control_group(2)
+
+                        elif event.key == pygame.K_3 and key_actions["control_clicked"]:
+                            self.add_currently_selected_to_control_group(3)
+                        elif event.key == pygame.K_3:
+                            self.select_control_group(3)
+
+                        elif event.key == pygame.K_4 and key_actions["control_clicked"]:
+                            self.add_currently_selected_to_control_group(4)
+                        elif event.key == pygame.K_4:
+                            self.select_control_group(4)
+
+                        elif event.key == pygame.K_5 and key_actions["control_clicked"]:
+                            self.add_currently_selected_to_control_group(5)
+                        elif event.key == pygame.K_5:
+                            self.select_control_group(5)
+
+                        elif event.key == pygame.K_6 and key_actions["control_clicked"]:
+                            self.add_currently_selected_to_control_group(6)
+                        elif event.key == pygame.K_6:
+                            self.select_control_group(6)
+
+                        elif event.key == pygame.K_7 and key_actions["control_clicked"]:
+                            self.add_currently_selected_to_control_group(7)
+                        elif event.key == pygame.K_7:
+                            self.select_control_group(7)
+
+                        elif event.key == pygame.K_8 and key_actions["control_clicked"]:
+                            self.add_currently_selected_to_control_group(8)
+                        elif event.key == pygame.K_8:
+                            self.select_control_group(8)
+
+                        elif event.key == pygame.K_9 and key_actions["control_clicked"]:
+                            self.add_currently_selected_to_control_group(9)
+                        elif event.key == pygame.K_9:
+                            self.select_control_group(9)
+
+                        elif event.key == pygame.K_LCTRL:
+                            key_actions["control_clicked"] = True
+
                         elif event.key == pygame.K_LSHIFT:
                             key_actions["shift_clicked"] = True
                         elif event.key == pygame.K_e:
@@ -1012,11 +1067,27 @@ class MetabolicNetwork:
                             key_actions["right_clicked"] = True
                         elif event.key == pygame.K_f:
                             key_actions["f_clicked"] = True
+                            if key_actions["shift_clicked"] or key_actions["control_clicked"]:
+                                set_to_freeze = False
+                                for node in self.all_network_nodes:
+                                    if node.selected_by_drag_selection:
+                                        set_to_freeze = node.fixed_by_mouse
+                                        break
+                                for node in self.all_network_nodes:
+                                    if node.selected_by_drag_selection:
+                                        node.fixed_by_mouse = not set_to_freeze
                         elif event.key == pygame.K_g:
                             self.search_input_text = ""
                             self.search_mode_enabled = True
+                        elif event.key == pygame.K_z and key_actions["control_clicked"]:
+                            self.undo_last_action()
+
+                        elif event.key == pygame.K_y and key_actions["control_clicked"]:
+                            self.redo_last_action()
                     elif event.type == pygame.KEYUP:
-                        if self.search_mode_enabled:
+                        if event.key == pygame.K_LCTRL:
+                            key_actions["control_clicked"] = False
+                        elif self.search_mode_enabled:
                             pass
                         elif event.key == pygame.K_LSHIFT:
                             key_actions["shift_clicked"] = False
@@ -1034,6 +1105,7 @@ class MetabolicNetwork:
                             key_actions["right_clicked"] = False
                         elif event.key == pygame.K_f:
                             key_actions["f_clicked"] = False
+
 
                     elif event.type == pygame.MOUSEBUTTONDOWN:
                         if event.button == 1 and key_actions["split_clicked"]:
@@ -1112,6 +1184,7 @@ class MetabolicNetwork:
                         if event.button == 1 and not key_actions["shift_clicked"]:
                             key_actions["left_mouse_clicked"] = False
                             selected_node = None
+                            self.start_command_recording = True
                             if self.drawing_selection_rect_on_screen:
                                 x_ = min(self.begin_selection_rect_pos[0], self.end_selection_rect_pos[0])
                                 y_ = min(self.begin_selection_rect_pos[1], self.end_selection_rect_pos[1])
@@ -1125,6 +1198,7 @@ class MetabolicNetwork:
                         elif event.button == 1 and key_actions["shift_clicked"]:
                              key_actions["left_mouse_clicked"] = False
                              selected_node = None
+                             self.start_command_recording = True
                              if self.drawing_selection_rect_on_screen:
                                  x_ = min(self.begin_selection_rect_pos[0], self.end_selection_rect_pos[0])
                                  y_ = min(self.begin_selection_rect_pos[1], self.end_selection_rect_pos[1])
@@ -1147,12 +1221,17 @@ class MetabolicNetwork:
                 elif key_actions["left_clicked"]:
                     self.viewport.x -= 8
                 if key_actions["left_mouse_clicked"]:
+
                     mouse_pos = pygame.mouse.get_pos()
                     scaled_mouse_x = (mouse_pos[0] + self.viewport.x) / self.zoom_factor
                     scaled_mouse_y = (mouse_pos[1] + self.viewport.y) / self.zoom_factor
                     scaled_mouse_pos = (scaled_mouse_x, scaled_mouse_y)
                     if selected_node is not None:
                         if not selected_node.selected_by_drag_selection:
+                            if self.start_command_recording == True:
+                                self.start_command_recording = False
+                                self.previous_commands.append([(selected_node, scaled_mouse_pos[0], scaled_mouse_pos[1])])
+                                self.next_commands_undone = []
                             selected_node.x = scaled_mouse_pos[0]
                             selected_node.y = scaled_mouse_pos[1]
                             if len(selected_node.split_of_nodes_partners)>0:
@@ -1165,16 +1244,26 @@ class MetabolicNetwork:
                             selected_node.x = scaled_mouse_pos[0]
                             selected_node.y = scaled_mouse_pos[1]
                             distance_x, distance_y = selected_node.x - previous_x, selected_node.y - previous_y
+                            temp_commands = []
                             for node in self.all_network_nodes:
                                 if node.selected_by_drag_selection and node != selected_node:
                                     if self.show_compartments:
                                         node.x += distance_x
                                         node.y += distance_y
                                         node.fixed_by_mouse = True
+                                        temp_commands.append((node, node.x, node.y))
                                     elif node.node_type != "compartment":
                                         node.x += distance_x
                                         node.y += distance_y
                                         node.fixed_by_mouse = True
+                                        temp_commands.append((node, node.x, node.y))
+
+
+                            if self.start_command_recording == True:
+                                temp_commands.append((selected_node, scaled_mouse_pos[0], scaled_mouse_pos[1]))
+                                self.start_command_recording = False
+                                self.previous_commands.append(temp_commands)
+                                self.next_commands_undone = []
 
                     else:
                         if not self.drawing_selection_rect_on_screen:
@@ -1583,6 +1672,41 @@ class MetabolicNetwork:
     def pygame_event_handling_code(self):
         pass
 
+    def undo_last_action(self):
+        if len(self.previous_commands) >0:
+            command = self.previous_commands.pop()
+            temp_commands = []
+            for command_tuple in command:
+                temp_commands.append((command_tuple[0], command_tuple[0].x, command_tuple[0].y))
+                command_tuple[0].x = command_tuple[1]
+                command_tuple[0].y = command_tuple[2]
+
+            self.next_commands_undone.append(temp_commands)
+
+    def redo_last_action(self):
+        if len(self.next_commands_undone)>0:
+            temp_commands = []
+            command = self.next_commands_undone.pop()
+            for command_tuple in command:
+                temp_commands.append((command_tuple[0], command_tuple[0].x, command_tuple[0].y))
+                command_tuple[0].x = command_tuple[1]
+                command_tuple[0].y = command_tuple[2]
+            self.previous_commands.append(temp_commands)
+
+    def add_currently_selected_to_control_group(self, ctrl_number):
+        self.control_groups_for_selection[ctrl_number] = []
+        for node in self.all_network_nodes:
+            if node.selected_by_drag_selection:
+                self.control_groups_for_selection[ctrl_number].append(node)
+
+    def select_control_group(self, ctrl_number):
+        for node in self.all_network_nodes:
+            node.selected_by_drag_selection = False
+
+        for node in self.control_groups_for_selection[ctrl_number]:
+            node.selected_by_drag_selection = True
+
+
     def update_search_recommendations(self):
         self.search_suggestion_list = []
         self.full_search_list =[]
@@ -1917,7 +2041,7 @@ class Application:
         self.create_load_previously_made_model()
         self.create_color_uncolor_lines_button()
         self.create_highlight_expressionless_button()
-
+        self.create_canvas_settings()
         width_ = self.root.winfo_width()
         height_ = self.root.winfo_height()
         self.root.geometry(f"{width_ + 270}x{height_+50}+0+0")
@@ -2164,7 +2288,7 @@ class Application:
     def create_reaction_name_checkbutton(self):
         self.selected_option = tk.StringVar(self.root, "Reaction Names")
         option_frame = tk.LabelFrame(self.root, text="Show rxn names options")
-        option_frame.grid(row=13, column=0, padx=10, pady=5, sticky="ew")
+        option_frame.grid(row=15, column=0, padx=10, pady=5, sticky="ew")
         options = ["No Names", "Reaction Names", "Reaction IDs"]
         for idx, option in enumerate(options):
             tk.Radiobutton(option_frame, text=option, variable=self.selected_option, value=option, command=self.on_reaction_name_checkbutton).grid(row=idx,
@@ -2177,7 +2301,7 @@ class Application:
     def create_metabolite_name_checkbutton(self):
         self.selected_option_metabolite = tk.StringVar(self.root, "No Names")
         option_frame = tk.LabelFrame(self.root, text="Show met names options")
-        option_frame.grid(row=13, column=1, padx=10, pady=5, sticky="ew")
+        option_frame.grid(row=15, column=1, padx=10, pady=5, sticky="ew")
         options = ["No Names", "Metabolite Names", "Metabolite IDs"]
         for idx, option in enumerate(options):
             tk.Radiobutton(option_frame, text=option, variable=self.selected_option_metabolite, value=option, command=self.on_metabolite_name_checkbutton).grid(
@@ -2190,7 +2314,7 @@ class Application:
     def create_fixed_metabolite_name_checkbutton(self):
         self.selected_option_fixed_metabolite = tk.StringVar(self.root, "No Fixed Names")
         option_frame = tk.LabelFrame(self.root, text="Show fixed met names options")
-        option_frame.grid(row=14, column=0, padx=10, pady=5, sticky="ew")
+        option_frame.grid(row=16, column=0, padx=10, pady=5, sticky="ew")
         options = ["No Fixed Names", "Fixed Metabolite Names", "Fixed Metabolite IDs"]
         for idx, option in enumerate(options):
             tk.Radiobutton(option_frame, text=option, variable=self.selected_option_fixed_metabolite, value=option,
@@ -2203,7 +2327,7 @@ class Application:
     def create_show_flux_expression_checkbutton(self):
         self.selected_option_flux_expression = tk.StringVar(self.root, "None")
         option_frame = tk.LabelFrame(self.root, text="Show Excel flux/expression")
-        option_frame.grid(row=14, column=1, padx=10, pady=5, sticky="ew")
+        option_frame.grid(row=16, column=1, padx=10, pady=5, sticky="ew")
         options = ["None", "Fluxes", "Expression", "Both flux and expression"]
         for idx, option in enumerate(options):
             tk.Radiobutton(option_frame, text=option, variable=self.selected_option_flux_expression, value=option,
@@ -2338,6 +2462,29 @@ class Application:
             self.met_network.fluxes_dict[str(value_3)] = round(value_1,3)
             self.met_network.expression_dict[str(value_3)] = round(value_2,3)
 
+    def create_canvas_settings(self):
+        self.canvas_width_entry = tk.Entry(self.root, width=10)
+        self.canvas_height_entry = tk.Entry(self.root, width=10)
+        label_width = tk.Label(self.root, text="Canvas Width")
+        label_width.grid(row=13, column=0)
+
+        default_width = tk.StringVar(value="900")  # Default width
+        self.canvas_width_entry = tk.Entry(self.root, textvariable=default_width)
+        self.canvas_width_entry.grid(row=14, column=0)
+
+        label_height = tk.Label(self.root, text="Canvas Height")
+        label_height.grid(row=13, column=1)
+
+        default_height = tk.StringVar(value="800")  # Default height
+        self.canvas_height_entry = tk.Entry(self.root, textvariable=default_height)
+        self.canvas_height_entry.grid(row=14, column=1)
+
+        button = tk.Button(self.root, text="Set Dimensions", command=self.on_canvas_settings_button)
+        button.grid(row=14, column=2)
+
+    def on_canvas_settings_button(self):
+        self.met_network.canvas_width = int(self.canvas_width_entry.get())
+        self.met_network.canvas_height = int(self.canvas_height_entry.get())
     def create_listboxes_visibility(self):
         label1 = tk.Label(self.root, text="visible")
         label1.grid(row=0, column=2, padx=10, pady=5)
