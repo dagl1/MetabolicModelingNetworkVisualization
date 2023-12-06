@@ -78,6 +78,8 @@ The settings of this application update the simulation real time, it is therefor
 
 ### Keyboard and mouse controls:
 ```
+Escape to stop application when in menu
+F1 to stop simulation
 WASD or arrow keys to move around the canvas
 E to zoom in
 Q to zoom out
