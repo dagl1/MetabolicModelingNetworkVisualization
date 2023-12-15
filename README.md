@@ -30,7 +30,7 @@ pip install -r requirements.txt
 ```
 Warning! It is better to create a virtual environment for your python deployment as to not interfere with any other projects you have going on:
 ```
-cd C:/location/where/you/want/to/go
+cd C:/chosen_file_location/
 python -m venv myenv 
 .\myenv\Scripts\activate # for Windows
 # or
@@ -42,7 +42,7 @@ For both of these approaches, you will need to have the requirements.txt file in
 ## Running
 To run the application after installing all required packages, run main.py through the console using:
 ``` cmd
-cd C:/location/of/your/main.py/file
+cd C:/location_of_your_file/
 python main.py 
 ```
 A window should open where a JSON file can be uploaded, this JSON file should have been created from a COBRA model using the "save_json_model()" function:
