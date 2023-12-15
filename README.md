@@ -58,7 +58,7 @@ A window should open where a JSON file can be uploaded, this JSON file should ha
 Confirming the file by uploading it to the application will open the settings screen. 
 **Alternatively, you can run the file directly by providing the file's location (either absolute path, or filename if it is in the correct folder).**
 ``` cmd
-python main.py json/file/location/json_file.json
+python main.py json_file_location/json_file.json
 ```
 
 In case you already have a pre-made JSON map you can upload this by clicking the "upload previously made JSON model" button. 
