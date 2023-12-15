@@ -159,6 +159,7 @@ Fluxes and expression data can only be shown by uploading the designated excel f
 
 ### Saving the simulation
 By clicking the "save latest simulation as .json" button, you can save your map, both for reloading into the application, but also applicable for importing it as a map for ESCHER where it can be further edited.
+![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/8a916909-148c-4389-ba0f-178605972b35)
 
 #### Author notes:
 If there are any issues in the usage or you have some new ideas for killer features, please raise an issue on this Github. 
