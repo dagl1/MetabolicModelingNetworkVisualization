@@ -1,4 +1,5 @@
 # Metabolic network visualization
+![ezgif com-optimize_zoomed2](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/4fa87890-29b8-451c-a519-2630b29e1036)
 ![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/8b9d14c1-7626-4796-9809-e6ffb53342f0)
 
 
@@ -140,6 +141,7 @@ Sometimes some metabolites or reactions connect two different clusters of nodes 
 
 ### Search mode
 You might want to find/highlight a node without finding it in the list of visible/invisible nodes. For that you can press g and enter search mode. While in search mode, most controls (other than clicks from the mouse), will not work and instead you can type into the search box on the bottom right (you do not need to press the button). To exit search mode, press Escape. While searching you will see recommendations, to autocomplete a recommendation press tab. To select a node press enter. To change which recommnendation is selected use the up/down arrow keys (selected recommendation is highlighted). The text in the yellow boxes will show where approximately in the names of the suggestions your input exists.
+![ezgif com-optimize_zoomed2](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/83d931ee-3539-4c43-9e83-cbc013680bbc)
 
 ### Zooming in and out
 You might feel like you cannot see exactly what is going on somewhere, in those cases zooming in (e) or out (q), and moving (w, a, s, d keys or arrow keys) the canvas might help. Zooming in is only visual, so the physics calculations will remain exactly the same.
