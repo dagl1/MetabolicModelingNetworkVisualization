@@ -78,31 +78,31 @@ To start a new simulation using just the JSON model and the current settings, pr
 The settings of this application update the simulation real time, it is therefore not necessary to set particular settings before running the simulation. However it is of course the case your final outcome may differ if you change settings during a run versus starting with those settings. In those cases, click the "Stop simulation" button. To start the latest run, press the "Restart the latest simulation" button, while for running a new simulation with the current settings, click the "Start simulation" button again.
 
 ### Keyboard and mouse controls:
-```
-Escape to stop application when in menu
-F1 to stop simulation
-WASD or arrow keys to move around the canvas
-E to zoom in
-Q to zoom out
-Left-mouse button (selected node + hold) to drag node. Can also be used to drag multiple nodes when they are selected by selection rectangle
-Left-mouse button (no node selected + hold) to create selection rectangle
-Shift + left-mouse button (no node selected + hold, pressing shift at release) to create selection rectangle that marks/unmarks nodes as "special"
-Right-mouse button to unselect nodes selected through rectangle
-Shift + Left-mouse button (click node) to mark/unmark node as "special"
-X + Left-Mouse button to split nodes based on marked "special" nodes
-F + Left-Mouse button to fix/unfix node
-V + Left-mouse button OR Middle-mouse button to make/unmake nodes visible (invisible nodes can be added back through the visibility list (see "Included/not included and visible/not visible" below)
-Ctrl + Z will undo the last movement action
-Ctrl + Y will redo the last undone movement action
-Ctrl + F OR Shift + F can unfix/fix all selected nodes
-Ctrl + 1-9 Will designate currently selected nodes as part of a control-group (designated by the number)
-1-9 Select nodes part of the control group of the corresponding number
-G to enter search mode
-(In search mode) Escape to exit search mode
-(In search mode) Tab to select suggestion
-(In search mode) Up/down arrow keys to change suggestion
-(In search mode) Enter, mark/unmark selected node for finding purposes
-```
+| Key combination | Description |
+| :-------------- | :---------- |
+| Escape | Stop application when in menu |
+| F1 | Stop simulation |
+| WASD or arrow keys | Move around the canvas |
+| E | Zoom in |
+| Q | Zoom out |
+| Left-mouse button (selected node + hold) | Drag node. Can also be used to drag multiple nodes when they are selected by selection rectangle |
+| Left-mouse button (no node selected + hold) | Create selection rectangle |
+| Shift + left-mouse button (no node selected + hold, pressing shift at release) | Create selection rectangle that marks/unmarks nodes as "special" |
+| Right-mouse button | Unselect nodes selected through rectangle |
+| Shift + Left-mouse button (click node) | Mark/unmark node as "special" |
+| X + Left-Mouse button | Split nodes based on marked "special" nodes |
+| F + Left-Mouse button | Fix/unfix node |
+| V + Left-mouse button OR Middle-mouse button | Make/unmake nodes visible (invisible nodes can be added back through the visibility list (see "Included/not included and visible/not visible" below) |
+| Ctrl + Z | Undo the last movement action |
+| Ctrl + Y | Redo the last undone movement action |
+| Ctrl + F OR Shift + F | Unfix/fix all selected nodes |
+| Ctrl + 1-9 | Designate currently selected nodes as part of a control-group (designated by the number) |
+| 1-9 | Select nodes part of the control group of the corresponding number |
+| G | Enter search mode |
+| (In search mode) Escape | Exit search mode |
+| (In search mode) Tab | Select suggestion |
+| (In search mode) Up/down arrow keys | Change to next/previous search suggestion |
+| (In search mode) Enter | Mark/unmark selected node for finding purposes |
 
 ### Attraction and Repulsion sliders:
 ```
