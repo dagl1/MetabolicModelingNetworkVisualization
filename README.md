@@ -1,5 +1,5 @@
 # Metabolic network visualization
-![ezgif com-optimize_zoomed2](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/4fa87890-29b8-451c-a519-2630b29e1036)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;![ezgif com-optimize_zoomed2](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/4fa87890-29b8-451c-a519-2630b29e1036)
 ![image](https://github.com/dagl1/MetabolicModelingNetworkVisualization/assets/24440380/8b9d14c1-7626-4796-9809-e6ffb53342f0)
 
 
